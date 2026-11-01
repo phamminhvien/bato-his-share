@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Giấy Ra Viện — Cửa sổ Popup Rời (window.open)</title>
+  <link rel="icon" href="../icons/icon48.png" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f1f5f9;
+      color: #0f172a;
+      padding: 16px 18px;
+      font-size: 13px;
+    }
+    .win-header {
+      background: linear-gradient(135deg, #1e1b4b 0%, #4338ca 100%);
+      color: #fff;
+      padding: 12px 15px;
+      border-radius: 9px;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+    .win-header h2 { font-size: 15px; font-weight: 700; }
+    .win-header p { font-size: 11.5px; color: #c7d2fe; margin-top: 2px; }
+    .win-note {
+      background: #eef2ff;
+      border: 1px solid #c7d2fe;
+      color: #3730a3;
+      padding: 9px 12px;
+      border-radius: 7px;
+      font-size: 12px;
+      margin-bottom: 12px;
+      line-height: 1.45;
+    }
+    .win-note code {
+      background: #e0e7ff;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-family: Consolas, monospace;
+      font-weight: 600;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #cbd5e1;
+      border-radius: 9px;
+      padding: 14px;
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 11px 12px;
+    }
+    .col-span-2 { grid-column: span 2; }
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .field label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #334155;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .chip {
+      font-size: 10px;
+      background: #f1f5f9;
+      color: #64748b;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-family: Consolas, monospace;
+    }
+    input[type="text"], input[type="number"], select {
+      width: 100%;
+      padding: 7px 9px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 13px;
+      color: #0f172a;
+      background: #fff;
+      outline: none;
+    }
+    input:focus, select:focus {
+      border-color: #4f46e5;
+      box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
+    }
+    .footer-bar {
+      margin-top: 14px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .btn {
+      padding: 7px 13px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid #cbd5e1;
+      background: #fff;
+      color: #1e293b;
+    }
+    .btn-close {
+      background: #4f46e5;
+      border-color: #4f46e5;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div class="win-header">
+    <div>
+      <h2>🪟 Cấp Giấy Ra Viện (Cửa sổ Popup rời — window.open)</h2>
+      <p>Kế thừa URL trang mẹ • Tự nhận diện <code>[🪟 Popup Rời]</code> khi bấm 🎯 Chọn từ Side Panel cửa sổ chính</p>
+    </div>
+  </div>
+
+  <div class="win-note">
+    💡 <b>Thử nghiệm ngay ([Demo 7]):</b> Chọn <b>Kết quả điều trị</b> bên dưới để tự điền <b>Số ngày nghỉ BHXH</b> &amp; <b>Lời dặn bác sĩ</b>.<br />
+    Hoặc ở cửa sổ chính, bấm <b>🎯 Chọn</b> trên BATO_SMART_FILL rồi rê chuột thẳng sang cửa sổ rời này!
+  </div>
+
+  <div class="card">
+    <div class="form-grid">
+      <div class="field">
+        <label for="cboKetQuaDieuTri">
+          <span>Kết quả điều trị (Trigger) *</span>
+          <span class="chip">#cboKetQuaDieuTri</span>
+        </label>
+        <select id="cboKetQuaDieuTri">
+          <option value="">-- Chọn kết quả điều trị --</option>
+          <option value="KHOI">1 - Khỏi bệnh</option>
+          <option value="DO_GIAM">2 - Đỡ, giảm</option>
+          <option value="NANG_HON">3 - Nặng hơn / Chuyển viện</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>
+          <span>Số ngày nghỉ hưởng BHXH</span>
+          <span class="chip">name="SoNgayNghiBHXH"</span>
+        </label>
+        <input type="number" name="SoNgayNghiBHXH" placeholder="Tự động điền số ngày..." />
+      </div>
+
+      <div class="field col-span-2">
+        <label>
+          <span>Lời dặn của Bác sĩ khi xuất viện</span>
+          <span class="chip">name="LoiDanBacSi"</span>
+        </label>
+        <input type="text" name="LoiDanBacSi" placeholder="Tự động điền lời dặn theo kết quả điều trị..." />
+      </div>
+    </div>
+
+    <div class="footer-bar">
+      <button type="button" id="btnResetChildForm" class="btn">🔄 Xóa trắng</button>
+      <button type="button" id="btnCloseWindowPopup" class="btn btn-close">Đóng cửa sổ Popup</button>
+    </div>
+  </div>
+
+  <script src="mock-his-server.js"></script>
+  <script src="../content/page-network-monitor.js"></script>
+  <script src="../plugins/custom-plugins.js"></script>
+  <script src="../content/content.js"></script>
+  <script src="popup-child.js"></script>
+</body>
+</html>

@@ -24,6 +24,18 @@
   let activeChainDepth = 0;
   let chainResetTimer = null;
 
+  // Theo dõi trạng thái đóng/mở của Popup (on_open) và sự kiện xuất hiện phần tử (appear)
+  const activeModalOpenTrackers = new Map(); // ruleId -> Element (modal đang mở đã kích hoạt)
+  const activeWindowPopupFired = new Set(); // ruleId đã nổ cho lần tải iframe/window_popup này
+  const activeAppearTrackers = new Map(); // ruleId -> Element đang hiển thị
+  let appearCheckTimer = null;
+
+  function isInternalNode(node) {
+    if (!node || !(node instanceof Element)) return false;
+    const id = node.id || '';
+    return id.startsWith('__bato_') || Boolean(node.closest('[id^="__bato_"]'));
+  }
+
   // Lắng nghe tín hiệu mạng từ content/page-network-monitor.js (MAIN World)
   window.addEventListener('__bato_net_activity__', (e) => {
     const detail = e && e.detail;
@@ -62,12 +74,6 @@
       let observer = null;
       let pollTimer = null;
       let finished = false;
-
-      const isInternalNode = (node) => {
-        if (!node || !(node instanceof Element)) return false;
-        const id = node.id || '';
-        return id.startsWith('__bato_') || Boolean(node.closest('[id^="__bato_"]'));
-      };
 
       const cleanupAndResolve = () => {
         if (finished) return;
@@ -131,15 +137,29 @@
   // ============================================================================
   // 1. ĐỒNG BỘ CẤU HÌNH TỪ STORAGE
   // ============================================================================
+  let isPopupBrowserWindow = Boolean(window.opener && window.opener !== window);
+
+  async function detectBrowserWindowType() {
+    try {
+      const res = await chrome.runtime.sendMessage({ type: 'BATO_CHECK_WINDOW_TYPE' });
+      if (res && res.isPopupWindow) {
+        isPopupBrowserWindow = true;
+        schedulePopupAppearCheck();
+      }
+    } catch (_) {}
+  }
+
   async function loadConfig() {
     try {
       const store = await chrome.storage.local.get(['enabled', 'showToast', 'rules']);
       appState.enabled = store.enabled !== false;
       appState.showToast = store.showToast !== false;
       appState.rules = Array.isArray(store.rules) ? store.rules : [];
+      schedulePopupAppearCheck();
     } catch (_) {}
   }
 
+  detectBrowserWindowType();
   loadConfig();
 
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -149,12 +169,36 @@
     if (changes.rules) {
       appState.rules = Array.isArray(changes.rules.newValue) ? changes.rules.newValue : [];
       lastProcessedValues.clear();
+      schedulePopupAppearCheck();
     }
   });
 
   // ============================================================================
-  // 2. TIỆN ÍCH KHỚP URL & TÌM KIẾM ELEMENT LINH HOẠT
+  // 2. TIỆN ÍCH KHỚP URL, NHẬN DIỆN POPUP & TÌM KIẾM ELEMENT LINH HOẠT
   // ============================================================================
+  const MODAL_CONTAINER_SELECTOR =
+    'dialog, [role="dialog"], [role="alertdialog"], [aria-modal="true"], .modal, .ant-modal, .el-dialog, .mat-mdc-dialog-container, .mat-dialog-container, .ui-dialog, .p-dialog, .k-window, .dx-popup-wrapper, .dxpcLite, .rwWindow, .x-window, .swal2-popup, .iziModal, .bootbox';
+
+  function isElementVisible(el) {
+    if (!el || !(el instanceof Element) || !el.isConnected) return false;
+    if (el.hasAttribute('hidden') || el.getAttribute('aria-hidden') === 'true') return false;
+    const tag = (el.tagName || '').toLowerCase();
+    if (tag === 'dialog' && !el.hasAttribute('open')) {
+      const dStyle = window.getComputedStyle(el);
+      if (dStyle.display === 'none') return false;
+    }
+    const style = window.getComputedStyle(el);
+    if (
+      style.display === 'none' ||
+      style.visibility === 'hidden' ||
+      parseFloat(style.opacity || '1') <= 0.01
+    ) {
+      return false;
+    }
+    const rect = el.getBoundingClientRect();
+    return rect.width > 2 && rect.height > 2;
+  }
+
   function matchUrlPattern(url, pattern) {
     if (!url || !pattern) return false;
     const raw = String(pattern).trim();
@@ -182,24 +226,188 @@
     return url.toLowerCase().includes(raw.toLowerCase());
   }
 
-  function getActiveRulesForPage() {
-    if (!appState.enabled) return [];
-    const currentUrl = window.location.href;
-    return appState.rules.filter(
-      (r) =>
-        r &&
-        r.enabled !== false &&
-        r.triggerSelector &&
-        Array.isArray(r.targets) &&
-        r.targets.some((t) => t && t.enabled !== false) &&
-        matchUrlPattern(currentUrl, r.urlPattern)
+  function getContextUrlsForPopupInheritance() {
+    const urls = [window.location.href];
+    if (window !== window.top) {
+      try {
+        if (window.top && window.top.location && window.top.location.href) {
+          urls.push(window.top.location.href);
+        }
+      } catch (_) {}
+    }
+    if (window.opener && window.opener !== window) {
+      try {
+        if (window.opener.location && window.opener.location.href) {
+          urls.push(window.opener.location.href);
+        }
+      } catch (_) {}
+    }
+    if (document.referrer) {
+      urls.push(document.referrer);
+    }
+    return urls.filter(Boolean);
+  }
+
+  function matchWindowOrFramePopupScope(scopeRaw) {
+    const scope = String(scopeRaw || '').trim();
+    if (!scope) return true;
+
+    if (/^title\s*:/i.test(scope)) {
+      const expected = scope.replace(/^title\s*:\s*/i, '').trim().toLowerCase();
+      return Boolean(expected && (document.title || '').toLowerCase().includes(expected));
+    }
+
+    if (/^name\s*:/i.test(scope)) {
+      const expected = scope.replace(/^name\s*:\s*/i, '').trim().toLowerCase();
+      return Boolean(expected && (window.name || '').toLowerCase().includes(expected));
+    }
+
+    // Kiểm tra khớp thẻ <iframe> trên trang mẹ
+    // Lưu ý quan trọng: window.frameElement thuộc Realm DOM của trang mẹ nên PHẢI kiểm tra nodeType === 1 thay vì instanceof Element!
+    if (window !== window.top) {
+      try {
+        const fe = window.frameElement;
+        if (fe && fe.nodeType === 1) {
+          if (
+            fe.id &&
+            (scope === fe.id || scope === `#${fe.id}` || scope === `#${CSS.escape(fe.id)}`)
+          ) {
+            return true;
+          }
+          try {
+            if (typeof fe.matches === 'function' && fe.matches(scope)) return true;
+          } catch (_) {}
+          const fName = (fe.getAttribute('name') || '').trim();
+          if (fName && fName.toLowerCase() === scope.toLowerCase()) return true;
+          const fTitle = (fe.getAttribute('title') || fName || '').toLowerCase();
+          if (fTitle && fTitle.includes(scope.toLowerCase())) return true;
+        }
+      } catch (_) {}
+    }
+
+    // Kiểm tra khớp đường dẫn URL của khung con / cửa sổ con
+    if (matchUrlPattern(window.location.href, scope)) return true;
+
+    // Kiểm tra khớp tiêu đề trang hoặc phần tử bên trong Popup
+    if ((document.title || '').toLowerCase().includes(scope.toLowerCase())) return true;
+    if (queryElementsSmart(scope).length > 0) return true;
+
+    return false;
+  }
+
+  function findVisibleDomModalsOnPage() {
+    const found = Array.from(document.querySelectorAll(MODAL_CONTAINER_SELECTOR)).filter(
+      (el) => !isInternalNode(el) && isElementVisible(el)
     );
+    return found;
   }
 
   /**
-   * Tìm danh sách phần tử theo CSS Selector, XPath (// hoặc (//), tiền tố dòng tương đối (row:), hoặc ID/Name trần
+   * Xác định ngữ cảnh khớp của riêng phần cấu hình Popup (dùng chung cho cả Runtime & nút 🔍 Kiểm tra).
+   * Trả về { matched: boolean, scopeRoot: Element | null } hoặc null nếu không khớp.
    */
-  function queryElementsSmart(selectorStr, contextEl = null) {
+  function resolvePopupContextScope(popupType, popupScope) {
+    const pType = popupType || 'auto';
+    const pScope = String(popupScope || '').trim();
+    const inIframe = window !== window.top;
+    const inDetachedWin = isPopupBrowserWindow || Boolean(window.opener && window.opener !== window);
+
+    if (pType === 'window_popup') {
+      if (!inDetachedWin) return null;
+      if (!matchWindowOrFramePopupScope(pScope)) return null;
+      return { matched: true, scopeRoot: null };
+    }
+
+    if (pType === 'iframe_popup') {
+      if (!inIframe) return null;
+      if (window.innerWidth <= 2 && window.innerHeight <= 2) return null;
+      if (!matchWindowOrFramePopupScope(pScope)) return null;
+      return { matched: true, scopeRoot: null };
+    }
+
+    if (pType === 'dom_modal') {
+      if (inIframe) return null;
+      if (pScope) {
+        const modalMatches = queryElementsSmart(pScope).filter(isElementVisible);
+        if (modalMatches.length === 0) return null;
+        return { matched: true, scopeRoot: modalMatches[modalMatches.length - 1] };
+      }
+      const openModals = findVisibleDomModalsOnPage();
+      if (openModals.length === 0) return null;
+      return { matched: true, scopeRoot: openModals[openModals.length - 1] };
+    }
+
+    // pType === 'auto': Tự động suy luận theo ngữ cảnh hiện tại
+    if (inDetachedWin) {
+      if (!matchWindowOrFramePopupScope(pScope)) return null;
+      return { matched: true, scopeRoot: null };
+    }
+    if (inIframe) {
+      if (window.innerWidth <= 2 && window.innerHeight <= 2) return null;
+      if (!matchWindowOrFramePopupScope(pScope)) return null;
+      return { matched: true, scopeRoot: null };
+    }
+    if (pScope) {
+      const modalMatches = queryElementsSmart(pScope).filter(isElementVisible);
+      if (modalMatches.length === 0) return null;
+      return { matched: true, scopeRoot: modalMatches[modalMatches.length - 1] };
+    }
+    const openModals = findVisibleDomModalsOnPage();
+    if (openModals.length === 0) return null;
+    return { matched: true, scopeRoot: openModals[openModals.length - 1] };
+  }
+
+  /**
+   * Kiểm tra Kịch bản có khớp với ngữ cảnh Trang / Popup hiện tại không.
+   * Trả về { matched: boolean, scopeRoot: Element | null }
+   * - scopeRoot là Element khung Modal nếu đang chạy chế độ Popup Modal HTML (khóa chặt không chạm trang nền!).
+   */
+  function resolveScenarioExecutionContext(rule) {
+    if (!rule || rule.enabled === false) return null;
+    const targets = Array.isArray(rule.targets) ? rule.targets : [];
+    if (!targets.some((t) => t && t.enabled !== false)) return null;
+
+    const isPopupRule = Boolean(rule.isPopup);
+    const isPopupOnOpen = isPopupRule && rule.popupTriggerMode === 'on_open';
+    if (!isPopupOnOpen && !rule.triggerSelector) return null;
+
+    if (!isPopupRule) {
+      // Kịch bản trang thường: chỉ chạy trên trang khớp URL trực tiếp (không rò rỉ vào iframe about:blank)
+      if (!matchUrlPattern(window.location.href, rule.urlPattern)) return null;
+      return { matched: true, scopeRoot: null };
+    }
+
+    // Kịch bản Popup: Bắt buộc URL gốc (hoặc URL kế thừa từ trang mẹ / opener) phải khớp urlPattern
+    const candidateUrls = getContextUrlsForPopupInheritance();
+    if (!candidateUrls.some((u) => matchUrlPattern(u, rule.urlPattern))) {
+      return null;
+    }
+
+    return resolvePopupContextScope(rule.popupType, rule.popupScope);
+  }
+
+  function getActiveRulesForPage() {
+    if (!appState.enabled) return [];
+    const results = [];
+    for (const r of appState.rules) {
+      const ctx = resolveScenarioExecutionContext(r);
+      if (ctx && ctx.matched) {
+        results.push({ rule: r, scopeRoot: ctx.scopeRoot });
+      }
+    }
+    return results;
+  }
+
+  function filterByScopeRoot(list, scopeRoot) {
+    if (!(scopeRoot instanceof Element)) return list;
+    return list.filter((el) => el === scopeRoot || scopeRoot.contains(el));
+  }
+
+  /**
+   * Tìm danh sách phần tử theo CSS Selector, XPath (// hoặc (//), tiền tố dòng tương đối (row:), hoặc ID/Name trần.
+   * Nếu truyền scopeRoot (ví dụ khung Modal Popup), kết quả được khóa chặt chỉ nằm bên trong scopeRoot.
+   */
+  function queryElementsSmart(selectorStr, contextEl = null, scopeRoot = null) {
     if (!selectorStr) return [];
     const raw = String(selectorStr).trim();
     if (!raw) return [];
@@ -211,10 +419,12 @@
       const rowContainer =
         contextEl instanceof Element
           ? contextEl.closest('tr, [role="row"], .row-item, li') || contextEl.parentElement
-          : document;
+          : scopeRoot instanceof Element
+            ? scopeRoot
+            : document;
       if (!rowContainer) return [];
       try {
-        return Array.from(rowContainer.querySelectorAll(subSel));
+        return filterByScopeRoot(Array.from(rowContainer.querySelectorAll(subSel)), scopeRoot);
       } catch (_) {
         return [];
       }
@@ -236,7 +446,28 @@
             list.push(snap.snapshotItem(i));
           }
         }
-        return list;
+        const scopedList = filterByScopeRoot(list, scopeRoot);
+        if (scopedList.length > 0) return scopedList;
+
+        // Nếu khóa trong scopeRoot (VD: Modal Popup có trùng nhãn với nền trang), đánh giá XPath tương đối từ scopeRoot
+        if (scopeRoot instanceof Element) {
+          const relXpath = raw.startsWith('(//') ? '(.//' + raw.slice(3) : './/' + raw.slice(2);
+          const relSnap = document.evaluate(
+            relXpath,
+            scopeRoot,
+            null,
+            XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
+            null
+          );
+          const relList = [];
+          for (let i = 0; i < relSnap.snapshotLength; i++) {
+            if (relSnap.snapshotItem(i) instanceof Element) {
+              relList.push(relSnap.snapshotItem(i));
+            }
+          }
+          if (relList.length > 0) return filterByScopeRoot(relList, scopeRoot);
+        }
+        return [];
       } catch (_) {
         return [];
       }
@@ -244,7 +475,7 @@
 
     // 2. Thử CSS Selector chuẩn
     try {
-      const found = Array.from(document.querySelectorAll(raw));
+      const found = filterByScopeRoot(Array.from(document.querySelectorAll(raw)), scopeRoot);
       if (found.length > 0) return found;
     } catch (_) {
       // Selector có thể có ký tự đặc biệt trong ID
@@ -252,25 +483,36 @@
 
     // 3. Nếu người dùng gõ thẳng ID hoặc Name không kèm # hoặc [name=...]
     if (!/^[#.\[\/>~+]/.test(raw) && !raw.includes(' ')) {
-      const byId = document.getElementById(raw);
-      if (byId) return [byId];
-      try {
-        const byName = Array.from(document.querySelectorAll(`[name="${CSS.escape(raw)}"]`));
-        if (byName.length > 0) return byName;
-      } catch (_) {}
+      if (scopeRoot instanceof Element) {
+        try {
+          const scopedByIdOrName = Array.from(
+            scopeRoot.querySelectorAll(`#${CSS.escape(raw)}, [name="${CSS.escape(raw)}"]`)
+          );
+          if (scopedByIdOrName.length > 0) return scopedByIdOrName;
+        } catch (_) {}
+      } else {
+        const byId = document.getElementById(raw);
+        if (byId) return [byId];
+        try {
+          const byName = Array.from(document.querySelectorAll(`[name="${CSS.escape(raw)}"]`));
+          if (byName.length > 0) return byName;
+        } catch (_) {}
+      }
     }
 
     // 4. Nếu bắt đầu bằng # nhưng chứa ký tự đặc biệt (ví dụ ASP.NET ctl00$Content$txtAge)
     if (raw.startsWith('#') && !raw.includes(' ')) {
       const byId = document.getElementById(raw.slice(1));
-      if (byId) return [byId];
+      if (byId && (!(scopeRoot instanceof Element) || scopeRoot === byId || scopeRoot.contains(byId))) {
+        return [byId];
+      }
     }
 
     return [];
   }
 
-  function findFirstElement(selectorStr, contextEl = null) {
-    const list = queryElementsSmart(selectorStr, contextEl);
+  function findFirstElement(selectorStr, contextEl = null, scopeRoot = null) {
+    const list = queryElementsSmart(selectorStr, contextEl, scopeRoot);
     return list.length > 0 ? list[0] : null;
   }
 
@@ -366,10 +608,13 @@
   /**
    * Kiểm tra xem eventTarget (hoặc tổ tiên của nó) có khớp với triggerSelector không
    */
-  function resolveMatchingTriggerElement(eventTarget, selectorStr) {
+  function resolveMatchingTriggerElement(eventTarget, selectorStr, scopeRoot = null) {
     if (!(eventTarget instanceof Element) || !selectorStr) return null;
+    if (scopeRoot instanceof Element && scopeRoot !== eventTarget && !scopeRoot.contains(eventTarget)) {
+      return null;
+    }
     const resolvedTarget = resolveUnderlyingControl(eventTarget);
-    const candidates = queryElementsSmart(selectorStr);
+    const candidates = queryElementsSmart(selectorStr, null, scopeRoot);
     if (candidates.length === 0) return null;
 
     for (const rawCandidate of candidates) {
@@ -501,8 +746,8 @@
    * Điền/chọn dữ liệu cho phần tử đích
    * Trả về { status: 'updated' | 'unchanged' | 'not_found', detail: string }
    */
-  function applyValueToTarget(selectorStr, actionType, rawValue, contextEl = null) {
-    const elements = queryElementsSmart(selectorStr, contextEl);
+  function applyValueToTarget(selectorStr, actionType, rawValue, contextEl = null, scopeRoot = null) {
+    const elements = queryElementsSmart(selectorStr, contextEl, scopeRoot);
     if (elements.length === 0) {
       return { status: 'not_found', detail: `Không tìm thấy phần tử: ${selectorStr}` };
     }
@@ -669,12 +914,20 @@
   // ============================================================================
   // 4. ĐÁNH GIÁ GIÁ TRỊ THEO CHẾ ĐỘ (FIXED / MAPPING / CUSTOM JS)
   // ============================================================================
-  function collectDomSnapshotForScript(scriptCode, contextEl = null) {
+  function collectDomSnapshotForScript(scriptCode, contextEl = null, scopeRoot = null) {
     const snapshot = {};
 
-    // 1. Quét tất cả input / select / textarea có id hoặc name trên trang
-    const controls = document.querySelectorAll('input, select, textarea');
-    controls.forEach((ctrl) => {
+    // 1. Quét tất cả input / select / textarea (ưu tiên ghi đè bởi phần tử nằm trong scopeRoot nếu đang chạy trong Popup)
+    const rootNode = scopeRoot instanceof Element ? scopeRoot : document;
+    const baseControls =
+      rootNode !== document
+        ? [
+            ...Array.from(document.querySelectorAll('input, select, textarea')),
+            ...Array.from(rootNode.querySelectorAll('input, select, textarea'))
+          ]
+        : Array.from(document.querySelectorAll('input, select, textarea'));
+
+    baseControls.forEach((ctrl) => {
       const state = readElementState(ctrl);
       if (ctrl.id) {
         snapshot[`#${ctrl.id}`] = state;
@@ -682,7 +935,7 @@
       }
       if (ctrl.name) {
         snapshot[`[name="${ctrl.name}"]`] = state;
-        if (!snapshot[ctrl.name]) snapshot[ctrl.name] = state;
+        if (!snapshot[ctrl.name] || rootNode.contains(ctrl)) snapshot[ctrl.name] = state;
       }
     });
 
@@ -691,7 +944,7 @@
     let match;
     while ((match = strRegex.exec(String(scriptCode || ''))) !== null) {
       const candidate = match[2].trim();
-      if (!candidate || candidate.length > 320 || snapshot[candidate]) continue;
+      if (!candidate || candidate.length > 320) continue;
       if (
         candidate.startsWith('//') ||
         candidate.startsWith('(//') ||
@@ -699,7 +952,9 @@
         /^[#.\[a-zA-Z]/.test(candidate) ||
         document.getElementById(candidate)
       ) {
-        const el = findFirstElement(candidate, contextEl);
+        const el =
+          findFirstElement(candidate, contextEl, scopeRoot) ||
+          findFirstElement(candidate, contextEl, null);
         if (el) {
           snapshot[candidate] = readElementState(el);
         }
@@ -723,16 +978,18 @@
       .replace(/\{\{\s*today_vn\s*\}\}/gi, `${dd}/${mm}/${yyyy}`);
   }
 
-  function evaluateMappingRules(targetCfg, triggerVal, contextEl = null) {
+  function evaluateMappingRules(targetCfg, triggerVal, contextEl = null, scopeRoot = null) {
     const rows = Array.isArray(targetCfg.mappings) ? targetCfg.mappings : [];
 
     for (const row of rows) {
       if (!row) continue;
 
-      // Cho phép tùy chỉnh Element nguồn điều kiện trên từng dòng (nếu để trống thì dùng Element chính)
+      // Cho phép tùy chỉnh Element nguồn điều kiện trên từng dòng (ưu tiên tìm trong Popup trước, rồi tới toàn trang)
       let sourceVal = triggerVal;
       if (row.sourceSelector && String(row.sourceSelector).trim() !== '') {
-        const customSourceEl = findFirstElement(row.sourceSelector, contextEl);
+        const customSourceEl =
+          findFirstElement(row.sourceSelector, contextEl, scopeRoot) ||
+          findFirstElement(row.sourceSelector, contextEl, null);
         sourceVal = readElementState(customSourceEl).value;
       }
 
@@ -843,7 +1100,7 @@
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  async function executeRule(rule, triggerEl, eventType) {
+  async function executeRule(rule, triggerEl, eventType, scopeRoot = null) {
     if (activeChainDepth >= 5) {
       console.warn('[BATO_SMART_FILL] Đã dừng chuỗi kích hoạt quá 5 tầng để tránh vòng lặp.');
       return;
@@ -874,7 +1131,9 @@
           await sleep(delayMs);
         }
 
-        const targetEl = targetCfg.selector ? findFirstElement(targetCfg.selector, triggerEl) : null;
+        const targetEl = targetCfg.selector
+          ? findFirstElement(targetCfg.selector, triggerEl, scopeRoot)
+          : null;
         const targetState = readElementState(targetEl);
 
         if (targetCfg.selector && fillMode === 'fixed') {
@@ -887,9 +1146,13 @@
         if (fillMode === 'fixed') {
           computedValue = resolveTemplateTokens(String(targetCfg.fixedValue ?? ''), triggerState);
         } else if (fillMode === 'mapping') {
-          computedValue = evaluateMappingRules(targetCfg, triggerState.value, triggerEl);
+          computedValue = evaluateMappingRules(targetCfg, triggerState.value, triggerEl, scopeRoot);
         } else if (fillMode === 'script') {
-          const domSnapshot = collectDomSnapshotForScript(targetCfg.scriptCode, triggerEl);
+          const domSnapshot = collectDomSnapshotForScript(
+            targetCfg.scriptCode,
+            triggerEl,
+            scopeRoot
+          );
           const evalRes = await chrome.runtime.sendMessage({
             type: 'BATO_EVAL_SCRIPT',
             scriptCode: targetCfg.scriptCode || '',
@@ -939,20 +1202,33 @@
           try {
             const parsedParams = parsePluginParams(targetCfg.pluginParams);
             const pluginHelpers = {
-              getVal: (sel) => readElementState(findFirstElement(sel, triggerEl)).value,
-              getText: (sel) => readElementState(findFirstElement(sel, triggerEl)).text,
-              isChecked: (sel) => readElementState(findFirstElement(sel, triggerEl)).checked,
-              query: (sel) => queryElementsSmart(sel, triggerEl),
+              getVal: (sel) =>
+                readElementState(
+                  findFirstElement(sel, triggerEl, scopeRoot) || findFirstElement(sel, triggerEl, null)
+                ).value,
+              getText: (sel) =>
+                readElementState(
+                  findFirstElement(sel, triggerEl, scopeRoot) || findFirstElement(sel, triggerEl, null)
+                ).text,
+              isChecked: (sel) =>
+                readElementState(
+                  findFirstElement(sel, triggerEl, scopeRoot) || findFirstElement(sel, triggerEl, null)
+                ).checked,
+              query: (sel) => queryElementsSmart(sel, triggerEl, scopeRoot),
               resolveControl: resolveUnderlyingControl,
               getVisibleEl: getVisibleControlElement,
               highlight: (elOrSel) => {
                 const rawTarget =
-                  elOrSel instanceof Element ? elOrSel : findFirstElement(elOrSel, triggerEl);
+                  elOrSel instanceof Element
+                    ? elOrSel
+                    : findFirstElement(elOrSel, triggerEl, scopeRoot);
                 if (rawTarget) highlightElementBriefly(rawTarget);
               },
               openSelect2: (selOrEl) => {
                 const rawTarget =
-                  selOrEl instanceof Element ? selOrEl : findFirstElement(selOrEl, triggerEl);
+                  selOrEl instanceof Element
+                    ? selOrEl
+                    : findFirstElement(selOrEl, triggerEl, scopeRoot);
                 const ctrl = resolveUnderlyingControl(rawTarget);
                 if (!ctrl) return false;
                 callMainWorldBridge(ctrl, { action: 'select2_open' });
@@ -960,16 +1236,21 @@
               },
               closeSelect2: (selOrEl) => {
                 const rawTarget =
-                  selOrEl instanceof Element ? selOrEl : findFirstElement(selOrEl, triggerEl);
+                  selOrEl instanceof Element
+                    ? selOrEl
+                    : findFirstElement(selOrEl, triggerEl, scopeRoot);
                 const ctrl = resolveUnderlyingControl(rawTarget);
                 if (!ctrl) return false;
                 callMainWorldBridge(ctrl, { action: 'select2_close' });
                 return true;
               },
-              setValue: (sel, val, act = 'auto') => applyValueToTarget(sel, act, val, triggerEl),
+              setValue: (sel, val, act = 'auto') =>
+                applyValueToTarget(sel, act, val, triggerEl, scopeRoot),
               setSelect2: (selOrEl, opts = {}) => {
                 const rawTarget =
-                  selOrEl instanceof Element ? selOrEl : findFirstElement(selOrEl, triggerEl);
+                  selOrEl instanceof Element
+                    ? selOrEl
+                    : findFirstElement(selOrEl, triggerEl, scopeRoot);
                 const ctrl = resolveUnderlyingControl(rawTarget);
                 if (!ctrl) return false;
                 callMainWorldBridge(ctrl, {
@@ -1021,7 +1302,8 @@
           targetCfg.selector,
           targetCfg.actionType || 'auto',
           computedValue,
-          triggerEl
+          triggerEl,
+          scopeRoot
         );
 
         if (applyRes.status === 'updated') {
@@ -1039,7 +1321,7 @@
     }
   }
 
-  function scheduleRuleExecution(rule, triggerEl, eventType, isImmediate = false) {
+  function scheduleRuleExecution(rule, triggerEl, eventType, isImmediate = false, scopeRoot = null) {
     let elemMap = lastProcessedValues.get(rule.id);
     if (!elemMap) {
       elemMap = new WeakMap();
@@ -1079,58 +1361,174 @@
 
       scenarioActiveSinceTs.delete(rule.id);
 
+      // Cập nhật lại scopeRoot mới nhất nếu Modal vừa được framework render lại
+      const freshCtx = resolveScenarioExecutionContext(rule);
+      const liveScopeRoot =
+        scopeRoot && scopeRoot.isConnected ? scopeRoot : freshCtx ? freshCtx.scopeRoot : null;
+
       // Trường hợp sau khi API xong, framework render lại thay thế node DOM mới
       const liveTriggerEl =
         triggerEl && triggerEl.isConnected
           ? triggerEl
-          : findFirstElement(rule.triggerSelector) || triggerEl;
+          : (rule.triggerSelector ? findFirstElement(rule.triggerSelector, null, liveScopeRoot) : null) ||
+            liveScopeRoot ||
+            triggerEl;
 
       const currentVal = readElementState(liveTriggerEl).value;
 
       // Ở chế độ 'auto', tránh nổ trùng lặp cùng 1 giá trị khi input -> change -> blur nối tiếp nhau
-      if ((rule.triggerEvent || 'auto') === 'auto' && eventType !== 'click' && eventType !== 'enter') {
-        const prevVal = elemMap.get(liveTriggerEl);
-        if (prevVal !== undefined && prevVal === currentVal) {
-          return;
+      if (
+        (rule.triggerEvent || 'auto') === 'auto' &&
+        eventType !== 'click' &&
+        eventType !== 'enter' &&
+        eventType !== 'appear' &&
+        eventType !== 'popup_open'
+      ) {
+        if (liveTriggerEl && typeof liveTriggerEl === 'object') {
+          const prevVal = elemMap.get(liveTriggerEl);
+          if (prevVal !== undefined && prevVal === currentVal) {
+            return;
+          }
+          elemMap.set(liveTriggerEl, currentVal);
         }
-        elemMap.set(liveTriggerEl, currentVal);
       }
 
-      executeRule(rule, liveTriggerEl, eventType);
+      executeRule(rule, liveTriggerEl, eventType, liveScopeRoot);
     }, initialDebounceMs);
 
     debounceTimers.set(timerKey, timer);
   }
 
   // ============================================================================
-  // 6. ĐĂNG KÝ BỘ LẮNG NGHE SỰ KIỆN TOÀN CỤC (EVENT DELEGATION)
+  // 6. ĐĂNG KÝ BỘ LẮNG NGHE SỰ KIỆN TOÀN CỤC & PHÁT HIỆN POPUP MỞ (APPEAR / ON_OPEN)
   // ============================================================================
   function handleDelegatedEvent(domEvent, mappedType) {
-    const activeRules = getActiveRulesForPage();
-    if (activeRules.length === 0) return;
+    const activeEntries = getActiveRulesForPage();
+    if (activeEntries.length === 0) return;
 
-    for (const rule of activeRules) {
+    for (const { rule, scopeRoot } of activeEntries) {
+      if (rule.isPopup && rule.popupTriggerMode === 'on_open') continue;
       const ruleEvent = rule.triggerEvent || 'auto';
-      const triggerEl = resolveMatchingTriggerElement(domEvent.target, rule.triggerSelector);
+      if (ruleEvent === 'appear') continue;
+
+      const triggerEl = resolveMatchingTriggerElement(
+        domEvent.target,
+        rule.triggerSelector,
+        scopeRoot
+      );
       if (!triggerEl) continue;
 
       if (ruleEvent === 'auto') {
         if (mappedType === 'change' || mappedType === 'blur' || mappedType === 'enter') {
-          scheduleRuleExecution(rule, triggerEl, mappedType, true);
+          scheduleRuleExecution(rule, triggerEl, mappedType, true, scopeRoot);
         } else if (mappedType === 'input') {
           const tag = (triggerEl.tagName || '').toLowerCase();
           if (tag === 'select') {
-            scheduleRuleExecution(rule, triggerEl, 'change', true);
+            scheduleRuleExecution(rule, triggerEl, 'change', true, scopeRoot);
           } else {
-            scheduleRuleExecution(rule, triggerEl, 'input', false);
+            scheduleRuleExecution(rule, triggerEl, 'input', false, scopeRoot);
           }
         }
       } else if (ruleEvent === mappedType) {
         const immediate = mappedType !== 'input';
-        scheduleRuleExecution(rule, triggerEl, mappedType, immediate);
+        scheduleRuleExecution(rule, triggerEl, mappedType, immediate, scopeRoot);
       }
     }
   }
+
+  function evaluateAppearAndPopupOpenRules() {
+    if (!appState.enabled || !Array.isArray(appState.rules) || appState.rules.length === 0) return;
+
+    for (const rule of appState.rules) {
+      if (!rule || rule.enabled === false) continue;
+
+      // Nhánh A: Kịch bản Popup kích hoạt "Ngay khi Popup vừa mở lên" (on_open)
+      if (rule.isPopup && rule.popupTriggerMode === 'on_open') {
+        const prevModal = activeModalOpenTrackers.get(rule.id);
+        if (prevModal && (!prevModal.isConnected || !isElementVisible(prevModal))) {
+          activeModalOpenTrackers.delete(rule.id);
+        }
+
+        const ctx = resolveScenarioExecutionContext(rule);
+        if (!ctx || !ctx.matched) {
+          activeModalOpenTrackers.delete(rule.id);
+          continue;
+        }
+
+        if (ctx.scopeRoot instanceof Element) {
+          // Modal HTML: nổ đúng 1 lần mỗi khi Modal chuyển sang trạng thái hiển thị
+          if (activeModalOpenTrackers.get(rule.id) !== ctx.scopeRoot) {
+            activeModalOpenTrackers.set(rule.id, ctx.scopeRoot);
+            const triggerNode =
+              (rule.triggerSelector
+                ? findFirstElement(rule.triggerSelector, null, ctx.scopeRoot)
+                : null) || ctx.scopeRoot;
+            scheduleRuleExecution(rule, triggerNode, 'popup_open', true, ctx.scopeRoot);
+          }
+        } else {
+          // Iframe Popup / Window.open Popup: nổ 1 lần ngay khi khung có kích thước hiển thị
+          if (window.innerWidth > 10 && window.innerHeight > 10) {
+            if (!activeWindowPopupFired.has(rule.id)) {
+              activeWindowPopupFired.add(rule.id);
+              const triggerNode =
+                (rule.triggerSelector ? findFirstElement(rule.triggerSelector) : null) ||
+                document.body;
+              scheduleRuleExecution(rule, triggerNode, 'popup_open', true, null);
+            }
+          } else {
+            activeWindowPopupFired.delete(rule.id);
+          }
+        }
+        continue;
+      }
+
+      // Nhánh B: Sự kiện "appear" (Khi phần tử Trigger xuất hiện trên màn hình)
+      if (rule.triggerEvent === 'appear' && rule.triggerSelector) {
+        const prevEl = activeAppearTrackers.get(rule.id);
+        if (prevEl && (!prevEl.isConnected || !isElementVisible(prevEl))) {
+          activeAppearTrackers.delete(rule.id);
+        }
+
+        const ctx = resolveScenarioExecutionContext(rule);
+        if (!ctx || !ctx.matched) continue;
+
+        const foundEl = findFirstElement(rule.triggerSelector, null, ctx.scopeRoot);
+        if (foundEl && isElementVisible(foundEl)) {
+          if (activeAppearTrackers.get(rule.id) !== foundEl) {
+            activeAppearTrackers.set(rule.id, foundEl);
+            scheduleRuleExecution(rule, foundEl, 'appear', true, ctx.scopeRoot);
+          }
+        }
+      }
+    }
+  }
+
+  function schedulePopupAppearCheck() {
+    if (appearCheckTimer) return;
+    appearCheckTimer = setTimeout(() => {
+      appearCheckTimer = null;
+      evaluateAppearAndPopupOpenRules();
+    }, 75);
+  }
+
+  const popupAppearObserver = new MutationObserver((mutations) => {
+    for (const m of mutations) {
+      if (!isInternalNode(m.target)) {
+        schedulePopupAppearCheck();
+        break;
+      }
+    }
+  });
+
+  if (document.documentElement) {
+    popupAppearObserver.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'style', 'hidden', 'open', 'aria-hidden']
+    });
+  }
+  window.addEventListener('resize', schedulePopupAppearCheck);
 
   document.addEventListener('change', (e) => handleDelegatedEvent(e, 'change'), true);
   document.addEventListener('input', (e) => handleDelegatedEvent(e, 'input'), true);
@@ -1159,12 +1557,13 @@
   // Bộ theo dõi bổ trợ (650ms) cho các thư viện UI đặc thù (jQuery Datepicker, Select2...)
   // thay đổi .value bằng code JS mà không bắn sự kiện DOM tiêu chuẩn
   setInterval(() => {
-    const activeRules = getActiveRulesForPage();
-    if (activeRules.length === 0) return;
+    const activeEntries = getActiveRulesForPage();
+    if (activeEntries.length === 0) return;
 
-    for (const rule of activeRules) {
+    for (const { rule, scopeRoot } of activeEntries) {
+      if (rule.isPopup && rule.popupTriggerMode === 'on_open') continue;
       if ((rule.triggerEvent || 'auto') !== 'auto') continue;
-      const triggerEl = findFirstElement(rule.triggerSelector);
+      const triggerEl = findFirstElement(rule.triggerSelector, null, scopeRoot);
       if (!triggerEl || document.activeElement === triggerEl) continue;
 
       let elemMap = lastProcessedValues.get(rule.id);
@@ -1188,7 +1587,7 @@
           if (rule.waitForSettled !== false) {
             await waitForWebEventSettled(Date.now(), rule.maxSettleMs || 3000);
           }
-          executeRule(rule, triggerEl, 'auto-detect');
+          executeRule(rule, triggerEl, 'auto-detect', scopeRoot);
         })();
       }
     }
@@ -1602,7 +2001,10 @@
     `;
 
     document.body.appendChild(pickerOverlay);
-    document.body.appendChild(pickerBanner);
+    // Chỉ hiển thị thanh hướng dẫn ở frame gốc hoặc cửa sổ chính (tránh lặp nhiều thanh nếu trang có nhiều iframe)
+    if (window === window.top) {
+      document.body.appendChild(pickerBanner);
+    }
 
     document.addEventListener('mousemove', onPickerMouseMove, true);
     document.addEventListener('click', onPickerClick, true);
@@ -1637,6 +2039,198 @@
     e.stopPropagation();
   }
 
+  // --------------------------------------------------------------------------
+  // BỘ TỰ ĐỘNG PHÁT HIỆN NGỮ CẢNH POPUP (WINDOW.OPEN / IFRAME / DOM MODAL)
+  // --------------------------------------------------------------------------
+  function findEnclosingDomModal(el) {
+    if (!el || !(el instanceof Element)) return null;
+
+    // Bước A: Quét theo chuẩn ngữ nghĩa HTML & các thư viện Modal/Dialog phổ biến trên HIS
+    let matched = el.closest(MODAL_CONTAINER_SELECTOR);
+    if (matched && !isInternalNode(matched)) {
+      // Nếu khớp phần ruột (.modal-dialog), ưu tiên lấy vỏ ngoài (.modal / [role="dialog"]) nếu có
+      let parentModal = matched.parentElement
+        ? matched.parentElement.closest(MODAL_CONTAINER_SELECTOR)
+        : null;
+      if (parentModal && !isInternalNode(parentModal)) {
+        matched = parentModal;
+      }
+      return matched;
+    }
+
+    // Bước B: Quét theo dấu hiệu vật lý CSS (bắt được cả Popup tự code tay bằng div position:fixed/absolute + z-index cao)
+    let cur = el;
+    while (cur && cur !== document.body && cur !== document.documentElement) {
+      const tag = (cur.tagName || '').toLowerCase();
+      if (!['header', 'nav', 'aside', 'footer'].includes(tag) && !isInternalNode(cur)) {
+        const st = window.getComputedStyle(cur);
+        const z = parseInt(st.zIndex, 10);
+        if ((st.position === 'fixed' || st.position === 'absolute') && !Number.isNaN(z) && z >= 80) {
+          const rect = cur.getBoundingClientRect();
+          if (
+            rect.width >= 180 &&
+            rect.height >= 90 &&
+            (rect.width < window.innerWidth * 0.98 || rect.height < window.innerHeight * 0.96)
+          ) {
+            return cur;
+          }
+        }
+      }
+      cur = cur.parentElement;
+    }
+
+    return null;
+  }
+
+  function extractModalTitleText(modalEl) {
+    if (!modalEl || !(modalEl instanceof Element)) return '';
+    const titleSelectors = [
+      '.modal-title',
+      '.ant-modal-title',
+      '.el-dialog__title',
+      '.ui-dialog-title',
+      '.p-dialog-title',
+      '.k-window-title',
+      '.dx-popup-title',
+      '[class*="modal-header"] h1',
+      '[class*="modal-header"] h2',
+      '[class*="modal-header"] h3',
+      '[class*="modal-header"] h4',
+      '[class*="modal-header"] h5',
+      'header h1',
+      'header h2',
+      'header h3',
+      'h2',
+      'h3',
+      'h4'
+    ];
+    for (const sel of titleSelectors) {
+      const node = modalEl.querySelector(sel);
+      if (node) {
+        const txt = String(node.textContent || '').replace(/\s+/g, ' ').trim();
+        if (txt && txt.length >= 2 && txt.length <= 80) return txt;
+      }
+    }
+    return '';
+  }
+
+  function buildModalScopeSelector(modalEl) {
+    if (!modalEl || !(modalEl instanceof Element)) return '';
+    if (isStableElementId(modalEl.id)) {
+      return `#${CSS.escape(modalEl.id)}`;
+    }
+    for (const attr of ['data-modal', 'data-dialog', 'data-testid', 'name', 'aria-label']) {
+      const val = modalEl.getAttribute(attr);
+      if (val && val.trim() && val.length <= 80) {
+        const cand = `${modalEl.tagName.toLowerCase()}[${attr}="${CSS.escape(val.trim())}"]`;
+        if (queryElementsSmart(cand).length === 1) return cand;
+      }
+    }
+    const title = extractModalTitleText(modalEl);
+    if (title) {
+      const tag = modalEl.tagName.toLowerCase();
+      const xp = `(//${tag}[.//*[normalize-space(.)=${toXPathLiteral(title)}]])[1]`;
+      const found = queryElementsSmart(xp);
+      if (found.length === 1 && (found[0] === modalEl || found[0].contains(modalEl) || modalEl.contains(found[0]))) {
+        return xp;
+      }
+    }
+    return buildOptimalSelector(modalEl);
+  }
+
+  function detectPopupContextForElement(target) {
+    // 1. Cửa sổ trình duyệt con tách rời (window.open)
+    if (isPopupBrowserWindow || (window.opener && window.opener !== window)) {
+      let parentUrl = '';
+      try {
+        if (window.opener && window.opener.location && window.opener.location.href) {
+          parentUrl = window.opener.location.href;
+        }
+      } catch (_) {}
+      if (!parentUrl) parentUrl = document.referrer || window.location.href;
+
+      let scope = '';
+      if (!window.location.href.startsWith('about:') && window.location.pathname && window.location.pathname !== '/') {
+        scope = `*${window.location.pathname}*`;
+      } else if (window.name) {
+        scope = `name:${window.name}`;
+      } else if (document.title && document.title.trim()) {
+        scope = `title:${document.title.trim()}`;
+      }
+
+      return {
+        isPopup: true,
+        popupType: 'window_popup',
+        popupScope: scope,
+        popupLabel: `🪟 Cửa sổ rời (${scope || document.title || 'window.open'})`,
+        parentUrl
+      };
+    }
+
+    // 2. Khung Popup nhúng bằng <iframe>
+    if (window !== window.top) {
+      let parentUrl = '';
+      try {
+        if (window.top && window.top.location && window.top.location.href) {
+          parentUrl = window.top.location.href;
+        }
+      } catch (_) {}
+      if (!parentUrl) parentUrl = document.referrer || '';
+
+      let scope = '';
+      try {
+        const fe = window.frameElement;
+        if (fe && fe.nodeType === 1) {
+          if (isStableElementId(fe.id)) {
+            scope = `#${CSS.escape(fe.id)}`;
+          } else if (fe.getAttribute('name')) {
+            scope = `iframe[name="${CSS.escape(fe.getAttribute('name'))}"]`;
+          }
+        }
+      } catch (_) {}
+
+      if (!scope) {
+        if (!window.location.href.startsWith('about:') && window.location.pathname && window.location.pathname !== '/') {
+          scope = `*${window.location.pathname}*`;
+        } else if (document.title && document.title.trim()) {
+          scope = `title:${document.title.trim()}`;
+        }
+      }
+
+      return {
+        isPopup: true,
+        popupType: 'iframe_popup',
+        popupScope: scope,
+        popupLabel: `🖼️ Khung Iframe (${scope || 'iframe'})`,
+        parentUrl
+      };
+    }
+
+    // 3. Hộp thoại nổi HTML (Modal / Dialog) trên cùng trang
+    const modalEl = findEnclosingDomModal(target);
+    if (modalEl) {
+      const scope = buildModalScopeSelector(modalEl);
+      const title = extractModalTitleText(modalEl);
+      return {
+        isPopup: true,
+        popupType: 'dom_modal',
+        popupScope: scope,
+        popupLabel: `💬 Modal HTML${title ? ': "' + title + '"' : ''} (${scope})`,
+        parentUrl: window.location.href
+      };
+    }
+
+    return {
+      isPopup: false,
+      popupType: 'none',
+      popupScope: '',
+      popupLabel: '',
+      parentUrl: window.location.href
+    };
+  }
+
+  let lastHoverPopupTag = '';
+
   function onPickerMouseMove(e) {
     if (!pickerActive || !pickerOverlay) return;
     const el = document.elementFromPoint(e.clientX, e.clientY);
@@ -1657,15 +2251,26 @@
     if (pickerHoveredEl !== lastComputedHoverEl) {
       lastComputedHoverEl = pickerHoveredEl;
       lastComputedHoverSel = buildOptimalSelector(pickerHoveredEl);
+      const det = detectPopupContextForElement(pickerHoveredEl);
+      if (det.isPopup) {
+        lastHoverPopupTag =
+          det.popupType === 'window_popup'
+            ? '[🪟 Popup Rời] '
+            : det.popupType === 'iframe_popup'
+              ? '[🖼️ Iframe] '
+              : '[💬 Modal] ';
+      } else {
+        lastHoverPopupTag = '';
+      }
     }
     const badge = pickerOverlay.firstElementChild;
     if (badge) {
       const s2Tag = underlying !== el ? ' (Select2)' : '';
       const shortSel =
-        lastComputedHoverSel.length > 68
-          ? lastComputedHoverSel.slice(0, 65) + '...'
+        lastComputedHoverSel.length > 62
+          ? lastComputedHoverSel.slice(0, 59) + '...'
           : lastComputedHoverSel;
-      badge.textContent = `<${pickerHoveredEl.tagName.toLowerCase()}>${s2Tag} ${shortSel}`;
+      badge.textContent = `${lastHoverPopupTag}<${pickerHoveredEl.tagName.toLowerCase()}>${s2Tag} ${shortSel}`;
     }
   }
 
@@ -1678,6 +2283,7 @@
     const selector = buildOptimalSelector(target);
     const suggestedAction = inferSuggestedAction(target);
     const tagInfo = `<${target.tagName.toLowerCase()}>`;
+    const popupDetection = detectPopupContextForElement(target);
 
     stopElementPicker();
 
@@ -1685,10 +2291,15 @@
       type: 'BATO_PICKER_SELECTED',
       selector,
       suggestedAction,
-      tagInfo
+      tagInfo,
+      popupDetection
     });
 
-    showToast(`✅ Đã lấy selector: ${selector}`);
+    showToast(
+      popupDetection.isPopup
+        ? `✅ Đã lấy selector (${popupDetection.popupLabel}): ${selector}`
+        : `✅ Đã lấy selector: ${selector}`
+    );
   }
 
   function onPickerKeyDown(e) {
@@ -1776,41 +2387,124 @@
     }
   }
 
-  // Nhận lệnh từ Popup (ví dụ: Bật Picker hoặc Kiểm tra Selector tồn tại trên trang)
+  // Nhận lệnh từ Popup (ví dụ: Bật Picker ở cả trang gốc + mọi iframe/window.open, Tắt Picker đồng bộ, hoặc Kiểm tra Selector)
   function dispatchRuntimePageCommand(message, sendResponse) {
     if (message.type === 'BATO_START_PICKER') {
-      if (window === window.top) {
-        startElementPicker(message.labelHint);
+      startElementPicker(message.labelHint);
+      sendResponse({ ok: true });
+      return;
+    }
+
+    if (message.type === 'BATO_STOP_PICKER') {
+      if (pickerActive) {
+        stopElementPicker();
       }
       sendResponse({ ok: true });
       return;
     }
 
+    if (message.type === 'BATO_INSPECT_POPUP_SCOPE') {
+      const ctx = resolvePopupContextScope(
+        message.popupType || 'auto',
+        message.popupScope || ''
+      );
+      if (ctx && ctx.matched) {
+        const targetToFlash = ctx.scopeRoot || document.body;
+        if (targetToFlash) {
+          highlightInspectionMatches([targetToFlash]);
+        }
+        if (message.inspectId) {
+          chrome.runtime
+            .sendMessage({
+              type: 'BATO_HIGHLIGHT_REPORT',
+              inspectId: message.inspectId,
+              count: 1,
+              label: document.title || window.location.pathname || 'Popup'
+            })
+            .catch(() => {});
+        }
+        sendResponse({ ok: true, count: 1 });
+        return false;
+      }
+      sendResponse({ ok: true, count: 0 });
+      return false;
+    }
+
     if (message.type === 'BATO_HIGHLIGHT_SELECTOR') {
-      const els = queryElementsSmart(message.selector);
+      let scopeEl = null;
+      if (message.isPopup && !message.ignorePopupContext) {
+        const ctx = resolvePopupContextScope(
+          message.popupType || 'auto',
+          message.popupScope || ''
+        );
+        if (!ctx || !ctx.matched) {
+          highlightInspectionMatches([]);
+          sendResponse({ ok: true, count: 0 });
+          return false;
+        }
+        scopeEl = ctx.scopeRoot;
+      } else if (!message.ignorePopupContext) {
+        // Kịch bản trang thường: không đếm nhầm phần tử nằm trong cửa sổ Popup rời hoặc Iframe khác URL
+        const inDetachedWin =
+          isPopupBrowserWindow || Boolean(window.opener && window.opener !== window);
+        if (inDetachedWin && message.urlPattern && !matchUrlPattern(window.location.href, message.urlPattern)) {
+          highlightInspectionMatches([]);
+          sendResponse({ ok: true, count: 0 });
+          return false;
+        }
+        if (window !== window.top && message.urlPattern && !matchUrlPattern(window.location.href, message.urlPattern)) {
+          highlightInspectionMatches([]);
+          sendResponse({ ok: true, count: 0 });
+          return false;
+        }
+      }
+
+      const els = queryElementsSmart(message.selector, null, scopeEl);
       highlightInspectionMatches(els);
+      if (els.length > 0 && message.inspectId) {
+        chrome.runtime
+          .sendMessage({
+            type: 'BATO_HIGHLIGHT_REPORT',
+            inspectId: message.inspectId,
+            count: els.length
+          })
+          .catch(() => {});
+      }
       sendResponse({ ok: true, count: els.length });
+      return false;
     }
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (!message || !message.type) return false;
-    if (message.type !== 'BATO_START_PICKER' && message.type !== 'BATO_HIGHLIGHT_SELECTOR') {
+    if (
+      message.type !== 'BATO_START_PICKER' &&
+      message.type !== 'BATO_STOP_PICKER' &&
+      message.type !== 'BATO_HIGHLIGHT_SELECTOR' &&
+      message.type !== 'BATO_INSPECT_POPUP_SCOPE'
+    ) {
       return false;
     }
 
-    // Khi gửi từ Side Panel sang trang Demo nội bộ (chrome-extension://.../demo/demo.html)
+    if (Array.isArray(message.targetTabIds) && message.targetTabIds.length > 0) {
+      if (typeof chrome.tabs?.getCurrent !== 'function') return false;
+      chrome.tabs.getCurrent((myTab) => {
+        if (!myTab || !message.targetTabIds.includes(myTab.id)) return;
+        dispatchRuntimePageCommand(message, sendResponse);
+      });
+      return false;
+    }
+
     if (message.targetTabId) {
       if (typeof chrome.tabs?.getCurrent !== 'function') return false;
       chrome.tabs.getCurrent((myTab) => {
         if (!myTab || myTab.id !== message.targetTabId) return;
         dispatchRuntimePageCommand(message, sendResponse);
       });
-      return true;
+      return false;
     }
 
-    dispatchRuntimePageCommand(message, sendResponse);
-    return false;
+    return dispatchRuntimePageCommand(message, sendResponse);
   });
 
   // ============================================================================
@@ -1818,7 +2512,7 @@
   // ============================================================================
   let toastTimeout = null;
   function showToast(msg, isError = false) {
-    if (window !== window.top) return;
+    if (window.innerWidth < 200 || window.innerHeight < 100) return;
     let toast = document.getElementById('__bato_smart_fill_toast__');
     if (!toast) {
       toast = document.createElement('div');

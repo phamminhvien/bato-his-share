@@ -278,6 +278,62 @@ body {
   color: #075985;
 }
 
+/* POPUP CONFIG BOX IN SCENARIO EDITOR */
+.popup-config-box {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  padding: 9px 11px;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.popup-config-box.active {
+  background: #f0f9ff;
+  border-color: #7dd3fc;
+}
+
+.popup-config-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.popup-detected-banner {
+  margin-top: 7px;
+  padding: 5px 9px;
+  border-radius: 5px;
+  background: #ecfdf5;
+  border: 1px solid #86efac;
+  color: #065f46;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.popup-config-details {
+  border-top: 1px dashed #bae6fd;
+  margin-top: 8px;
+  padding-top: 2px;
+}
+
+.popup-open-hint {
+  background: #ecfdf5;
+  border: 1px solid #86efac;
+  color: #065f46;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  margin-bottom: 8px;
+}
+
+.badge-popup {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}
+
 .toast-toggle {
   display: inline-flex;
   align-items: center;

@@ -230,11 +230,13 @@
   function sanitizeScenario(rawScn) {
     const s = rawScn && typeof rawScn === 'object' ? rawScn : {};
     const targets = Array.isArray(s.targets) ? s.targets.map(sanitizeRuleItem) : [];
-    return {
+    const isPopup = Boolean(s.isPopup);
+    const clean = {
       id: s.id || uid('scn'),
       name: String(s.name ?? '').trim(),
       enabled: s.enabled !== false,
       urlPattern: String(s.urlPattern ?? '').trim(),
+      isPopup,
       triggerSelector: String(s.triggerSelector ?? '').trim(),
       triggerEvent: s.triggerEvent || 'auto',
       triggerWaitMs: Math.max(0, parseInt(s.triggerWaitMs, 10) || 0),
@@ -242,11 +244,21 @@
       maxSettleMs: Math.max(200, parseInt(s.maxSettleMs, 10) || 3000),
       targets
     };
+
+    if (isPopup) {
+      clean.popupType = ['auto', 'dom_modal', 'iframe_popup', 'window_popup'].includes(s.popupType)
+        ? s.popupType
+        : 'auto';
+      clean.popupScope = String(s.popupScope ?? '').trim();
+      clean.popupTriggerMode = s.popupTriggerMode === 'on_open' ? 'on_open' : 'element_event';
+    }
+
+    return clean;
   }
 
   /**
    * Tạo dấu vân tay cấu hình chuẩn (Fingerprint) cho Kịch bản để kiểm tra trùng lặp:
-   * So sánh toàn bộ URL, Trigger, Sự kiện, Danh sách Rule, Element đích & chi tiết cấu hình,
+   * So sánh toàn bộ URL, Cấu hình Popup, Trigger, Sự kiện, Danh sách Rule, Element đích & chi tiết cấu hình,
    * KHÔNG phân biệt tên Kịch bản (name) và mã định danh (id).
    */
   function buildScenarioFingerprint(rawScn) {
@@ -283,8 +295,14 @@
 
     return JSON.stringify({
       urlPattern: s.urlPattern.toLowerCase(),
-      triggerSelector: s.triggerSelector,
-      triggerEvent: s.triggerEvent,
+      isPopup: Boolean(s.isPopup),
+      popupType: s.isPopup ? s.popupType || 'auto' : '',
+      popupScope: s.isPopup ? (s.popupScope || '').trim() : '',
+      popupTriggerMode: s.isPopup ? s.popupTriggerMode || 'element_event' : '',
+      triggerSelector:
+        s.isPopup && s.popupTriggerMode === 'on_open' ? '' : s.triggerSelector,
+      triggerEvent:
+        s.isPopup && s.popupTriggerMode === 'on_open' ? 'on_open' : s.triggerEvent,
       triggerWaitMs: s.triggerWaitMs,
       waitForSettled: s.waitForSettled,
       maxSettleMs: s.waitForSettled ? s.maxSettleMs : 0,
@@ -381,6 +399,10 @@
       name: '',
       enabled: true,
       urlPattern: defaultUrl,
+      isPopup: false,
+      popupType: 'auto',
+      popupScope: '',
+      popupTriggerMode: 'element_event',
       triggerSelector: '',
       triggerEvent: 'auto',
       triggerWaitMs: 0,
@@ -458,18 +480,32 @@
     }
   }
 
-  function showPickerNotice(selector) {
+  function showPickerNotice(selector, popupDet = null) {
     const bar = document.getElementById('pickerNoticeBar');
     const txt = document.getElementById('pickerNoticeText');
-    txt.textContent = `✅ Đã lấy selector: ${selector}`;
+    if (popupDet && popupDet.isPopup && popupDet.popupLabel) {
+      txt.textContent = `✅ Đã lấy: ${selector} • Tự nhận diện ${popupDet.popupLabel}`;
+    } else {
+      txt.textContent = `✅ Đã lấy selector: ${selector}`;
+    }
     bar.classList.remove('hidden');
+
+    const detBanner = document.getElementById('popupDetectedBanner');
+    if (detBanner) {
+      if (popupDet && popupDet.isPopup && popupDet.popupLabel) {
+        detBanner.textContent = `✨ Đã tự động nhận diện: ${popupDet.popupLabel}`;
+        detBanner.classList.remove('hidden');
+      } else {
+        detBanner.classList.add('hidden');
+      }
+    }
   }
 
   function bindRealtimeListeners() {
-    // Nhận selector trực tiếp khi người dùng click chọn phần tử trên trang web bên trái
+    // Nhận selector & kết quả tự nhận diện Popup trực tiếp khi người dùng click chọn trên trang web / Popup
     chrome.runtime.onMessage.addListener((message) => {
       if (message && message.type === 'BATO_DRAFT_UPDATED_FROM_PICKER' && message.draft) {
-        showPickerNotice(message.selector);
+        showPickerNotice(message.selector, message.popupDetection || null);
         const draft = message.draft;
         const savedModal = draft.activeRuleModal || null;
         delete draft.activeRuleModal;
@@ -587,6 +623,24 @@
             ? `${rulesCount} Rule`
             : `${activeRulesCount}/${rulesCount} Rule bật`;
 
+        const popupBadgeLabel = scn.isPopup
+          ? scn.popupType === 'iframe_popup'
+            ? '🖼️ Popup Iframe'
+            : scn.popupType === 'window_popup'
+              ? '🪟 Popup Cửa sổ rời'
+              : scn.popupType === 'dom_modal'
+                ? '💬 Popup Modal'
+                : '🪟 Popup'
+          : '';
+        const triggerMetaHtml =
+          scn.isPopup && scn.popupTriggerMode === 'on_open'
+            ? `<span class="meta-tag" title="Tự chạy ngay khi Popup mở">🚀 Khi mở Popup${
+                scn.popupScope ? ' (' + escapeHtml(scn.popupScope) + ')' : ''
+              }</span>`
+            : `<span class="meta-tag mono" title="Trigger: ${escapeHtml(scn.triggerSelector)}">⚡ ${escapeHtml(
+                scn.triggerSelector
+              )} (${escapeHtml(scn.triggerEvent || 'auto')})</span>`;
+
         return `
           <div class="scenario-card ${scn.enabled === false ? 'disabled' : ''}">
             <div class="scenario-card-top">
@@ -594,6 +648,7 @@
                 <span class="scenario-name" title="${escapeHtml(scn.name || 'Kịch bản không tên')}">
                   ${escapeHtml(scn.name || 'Kịch bản không tên')}
                 </span>
+                ${popupBadgeLabel ? `<span class="badge badge-popup">${popupBadgeLabel}</span>` : ''}
                 ${isMatched ? '<span class="badge badge-match">Khớp trang này</span>' : ''}
               </div>
               <label class="switch-wrap" title="Bật / Tắt kịch bản này">
@@ -608,9 +663,7 @@
               <span class="meta-tag mono" title="URL: ${escapeHtml(scn.urlPattern)}">🌐 ${escapeHtml(
           scn.urlPattern || '*'
         )}</span>
-              <span class="meta-tag mono" title="Trigger: ${escapeHtml(scn.triggerSelector)}">⚡ ${escapeHtml(
-          scn.triggerSelector
-        )} (${escapeHtml(scn.triggerEvent || 'auto')})</span>
+              ${triggerMetaHtml}
               <span class="meta-tag">📑 ${ruleCountLabel}</span>
             </div>
 
@@ -728,11 +781,39 @@
     openScenarioEditor(fresh, true);
   }
 
+  function updatePopupEditorVisibility() {
+    const isPopup = Boolean(document.getElementById('chkIsPopup')?.checked);
+    const triggerMode = document.getElementById('selPopupTriggerMode')?.value || 'element_event';
+    const isOnOpen = isPopup && triggerMode === 'on_open';
+
+    document.querySelector('.popup-config-box')?.classList.toggle('active', isPopup);
+    document.getElementById('popupConfigDetails')?.classList.toggle('hidden', !isPopup);
+    if (!isPopup) {
+      document.getElementById('popupDetectedBanner')?.classList.add('hidden');
+    }
+
+    document.getElementById('popupOnOpenHint')?.classList.toggle('hidden', !isOnOpen);
+    document.getElementById('lblTriggerReqStar')?.classList.toggle('hidden', isOnOpen);
+    document.getElementById('triggerEventCol')?.classList.toggle('hidden', isOnOpen);
+
+    const inpTrig = document.getElementById('inpTriggerSelector');
+    if (inpTrig) {
+      inpTrig.placeholder = isOnOpen
+        ? 'Không bắt buộc (Tự kích hoạt ngay khi Popup mở)'
+        : "VD: #id_element, .class_name, [name='field_name']";
+    }
+  }
+
   function syncScenarioTopFields() {
     if (!state.editingScenario) return;
     state.editingScenario.name = document.getElementById('inpScenarioName').value;
     state.editingScenario.enabled = document.getElementById('selScenarioEnabled').value === 'true';
     state.editingScenario.urlPattern = document.getElementById('inpUrlPattern').value.trim();
+    state.editingScenario.isPopup = document.getElementById('chkIsPopup').checked;
+    state.editingScenario.popupType = document.getElementById('selPopupType').value || 'auto';
+    state.editingScenario.popupScope = document.getElementById('inpPopupScope').value.trim();
+    state.editingScenario.popupTriggerMode =
+      document.getElementById('selPopupTriggerMode').value || 'element_event';
     state.editingScenario.triggerSelector = document.getElementById('inpTriggerSelector').value.trim();
     state.editingScenario.triggerEvent = document.getElementById('selTriggerEvent').value;
     state.editingScenario.triggerWaitMs =
@@ -774,6 +855,11 @@
     document.getElementById('inpScenarioName').value = scnObj.name || '';
     document.getElementById('selScenarioEnabled').value = scnObj.enabled !== false ? 'true' : 'false';
     document.getElementById('inpUrlPattern').value = scnObj.urlPattern || '';
+    document.getElementById('chkIsPopup').checked = Boolean(scnObj.isPopup);
+    document.getElementById('selPopupType').value = scnObj.popupType || 'auto';
+    document.getElementById('inpPopupScope').value = scnObj.popupScope || '';
+    document.getElementById('selPopupTriggerMode').value =
+      scnObj.popupTriggerMode || 'element_event';
     document.getElementById('inpTriggerSelector').value = scnObj.triggerSelector || '';
     document.getElementById('selTriggerEvent').value = scnObj.triggerEvent || 'auto';
     document.getElementById('inpTriggerWaitMs').value = scnObj.triggerWaitMs || 0;
@@ -781,6 +867,7 @@
     document.getElementById('inpMaxSettleMs').value = scnObj.maxSettleMs || 3000;
     document.getElementById('wrapMaxSettleMs').classList.toggle('hidden', !isSettledOn);
 
+    updatePopupEditorVisibility();
     renderRulesTable();
 
     if (persistImmediately) {
@@ -1598,7 +1685,8 @@
       return;
     }
 
-    if (!scn.triggerSelector) {
+    const isPopupOnOpen = Boolean(scn.isPopup && scn.popupTriggerMode === 'on_open');
+    if (!isPopupOnOpen && !scn.triggerSelector) {
       alert('Vui lòng nhập hoặc Chọn Selector cho Element chính bắt sự kiện!');
       document.getElementById('inpTriggerSelector').focus();
       return;
@@ -1617,10 +1705,10 @@
     );
 
     if (!scn.name || !scn.name.trim()) {
-      scn.name = generateUniqueScenarioName(
-        `Kịch bản từ ${scn.triggerSelector} (${scn.targets.length} Rule)`,
-        otherNormNames
-      );
+      const autoLabel = isPopupOnOpen
+        ? `Kịch bản mở Popup ${scn.popupScope || scn.urlPattern} (${scn.targets.length} Rule)`
+        : `Kịch bản từ ${scn.triggerSelector} (${scn.targets.length} Rule)`;
+      scn.name = generateUniqueScenarioName(autoLabel, otherNormNames);
     }
 
     const cleanScn = sanitizeScenario(scn);
@@ -1671,12 +1759,21 @@
   }
 
   // ==========================================================================
-  // GIAO TIẾP VỚI TRANG WEB BÊN TRÁI (PICKER & HIGHLIGHT KIỂM TRA)
+  // GIAO TIẾP VỚI TRANG WEB BÊN TRÁI & CÁC POPUP ĐANG MỞ (PICKER & HIGHLIGHT)
   // ==========================================================================
+  function isRestrictedBrowserUrl(url) {
+    if (!url) return true;
+    return (
+      url.startsWith('chrome://') ||
+      url.startsWith('edge://') ||
+      (url.startsWith('chrome-extension://') && !isOwnDemoTabUrl(url))
+    );
+  }
+
   async function ensureContentScriptsReady(tabId) {
     try {
       await chrome.scripting.executeScript({
-        target: { tabId },
+        target: { tabId, allFrames: true },
         world: 'MAIN',
         files: ['content/page-network-monitor.js']
       });
@@ -1684,21 +1781,76 @@
 
     try {
       await chrome.scripting.executeScript({
-        target: { tabId },
+        target: { tabId, allFrames: true },
         files: ['plugins/custom-plugins.js', 'content/content.js']
       });
     } catch (_) {}
   }
 
-  async function sendMessageToActivePage(tab, payload) {
-    if (isOwnDemoTabUrl(tab.url)) {
-      return await chrome.runtime.sendMessage({
-        ...payload,
-        targetTabId: tab.id
-      });
+  /**
+   * Thu thập danh sách toàn bộ Tab có thể tương tác trực tiếp:
+   * - Tab đang active ở cửa sổ chính
+   * - Toàn bộ các cửa sổ Popup rời (window.open / type === 'popup') đang mở trên màn hình
+   * Giúp người dùng bấm "🎯 Chọn" ở Side Panel rồi rê chuột sang bất kỳ Modal, Iframe hay Cửa sổ Popup rời nào cũng bắt được ngay!
+   */
+  async function getInteractiveTargetTabs() {
+    await refreshActiveTab();
+    const collected = [];
+    const seenIds = new Set();
+
+    const pushTab = (t) => {
+      if (!t || !t.id || seenIds.has(t.id)) return;
+      if (isRestrictedBrowserUrl(t.url || '')) return;
+      seenIds.add(t.id);
+      collected.push(t);
+    };
+
+    if (state.activeTab) {
+      pushTab(state.activeTab);
     }
-    await ensureContentScriptsReady(tab.id);
-    return await chrome.tabs.sendMessage(tab.id, payload);
+
+    try {
+      const popupWins = await chrome.windows.getAll({
+        populate: true,
+        windowTypes: ['popup']
+      });
+      for (const w of popupWins || []) {
+        for (const t of w.tabs || []) {
+          pushTab(t);
+        }
+      }
+    } catch (_) {}
+
+    return collected;
+  }
+
+  async function broadcastMessageToTargetTabs(tabs, payload) {
+    const demoTabs = tabs.filter((t) => isOwnDemoTabUrl(t.url || ''));
+    const webTabs = tabs.filter((t) => !isOwnDemoTabUrl(t.url || ''));
+    const responses = [];
+    let deliveredCount = 0;
+
+    if (demoTabs.length > 0) {
+      try {
+        const res = await chrome.runtime.sendMessage({
+          ...payload,
+          targetTabIds: demoTabs.map((t) => t.id)
+        });
+        deliveredCount += demoTabs.length;
+        if (res) responses.push(res);
+      } catch (_) {}
+    }
+
+    for (const tab of webTabs) {
+      try {
+        await ensureContentScriptsReady(tab.id);
+        const res = await chrome.tabs.sendMessage(tab.id, payload);
+        deliveredCount++;
+        if (res) responses.push(res);
+      } catch (_) {}
+    }
+
+    return { deliveredCount, responses };
   }
 
   async function openBuiltInDemoLab() {
@@ -1742,19 +1894,15 @@
   }
 
   async function startPickerOnActivePage(field, mappingIndex, labelHint) {
-    await refreshActiveTab();
-    if (!state.activeTab || !state.activeTab.id) {
-      alert('Không tìm thấy tab trình duyệt đang mở.');
-      return;
-    }
-
-    const url = state.activeTab.url || '';
-    if (
-      url.startsWith('chrome://') ||
-      url.startsWith('edge://') ||
-      (url.startsWith('chrome-extension://') && !isOwnDemoTabUrl(url))
-    ) {
-      alert('Trình duyệt không cho phép chọn phần tử trên trang nội bộ hệ thống. Hãy mở trang web cần cấu hình ở khung bên trái!');
+    const targetTabs = await getInteractiveTargetTabs();
+    if (targetTabs.length === 0) {
+      if (!state.activeTab || !state.activeTab.id) {
+        alert('Không tìm thấy tab trình duyệt đang mở.');
+      } else {
+        alert(
+          'Trình duyệt không cho phép chọn phần tử trên trang nội bộ hệ thống. Hãy mở trang web cần cấu hình ở khung bên trái!'
+        );
+      }
       return;
     }
 
@@ -1766,54 +1914,140 @@
       }
     });
 
-    try {
-      await sendMessageToActivePage(state.activeTab, {
-        type: 'BATO_START_PICKER',
-        labelHint
-      });
-    } catch (_) {
+    const { deliveredCount } = await broadcastMessageToTargetTabs(targetTabs, {
+      type: 'BATO_START_PICKER',
+      labelHint
+    });
+
+    if (deliveredCount === 0) {
       alert('Không thể kết nối tới trang web hiện tại. Hãy tải lại (F5) trang web rồi thử lại!');
     }
   }
 
-  async function highlightSelectorOnActivePage(selector) {
+  async function collectHighlightReports(targetTabs, payload, waitMs = 150) {
+    const inspectId = uid('hl');
+    const reports = [];
+
+    const onReport = (msg) => {
+      if (msg && msg.type === 'BATO_HIGHLIGHT_REPORT' && msg.inspectId === inspectId) {
+        reports.push(msg);
+      }
+    };
+
+    chrome.runtime.onMessage.addListener(onReport);
+    try {
+      const { deliveredCount } = await broadcastMessageToTargetTabs(targetTabs, {
+        ...payload,
+        inspectId
+      });
+      await new Promise((r) => setTimeout(r, waitMs));
+      const totalCount = reports.reduce((sum, item) => sum + ((item && item.count) || 0), 0);
+      return { deliveredCount, totalCount, reports };
+    } finally {
+      chrome.runtime.onMessage.removeListener(onReport);
+    }
+  }
+
+  async function highlightSelectorOnActivePage(selector, options = {}) {
     if (!selector) {
       alert('Hãy nhập Selector trước khi kiểm tra!');
       return;
     }
-    await refreshActiveTab();
-    if (!state.activeTab || !state.activeTab.id) return;
+
+    const targetTabs = await getInteractiveTargetTabs();
+    if (targetTabs.length === 0) return;
+
+    const ignorePopupContext = Boolean(options.ignorePopupContext);
+    const isPopup = !ignorePopupContext && Boolean(document.getElementById('chkIsPopup')?.checked);
+    const popupType = document.getElementById('selPopupType')?.value || 'auto';
+    const popupScope = (document.getElementById('inpPopupScope')?.value || '').trim();
+    const urlPattern = (document.getElementById('inpUrlPattern')?.value || '').trim();
 
     if (/^row\s*:/i.test(selector.trim())) {
       const subSel = selector.trim().replace(/^row\s*:\s*/i, '');
-      const res = await sendMessageToActivePage(state.activeTab, {
+      const { totalCount } = await collectHighlightReports(targetTabs, {
         type: 'BATO_HIGHLIGHT_SELECTOR',
-        selector: subSel
+        selector: subSel,
+        isPopup,
+        popupType,
+        popupScope,
+        urlPattern,
+        ignorePopupContext
       });
-      if (!res || res.count === 0) {
-        alert(`Không tìm thấy phần tử dòng nào khớp với "${subSel}" trên trang hiện tại.`);
+      if (totalCount === 0) {
+        alert(`Không tìm thấy phần tử dòng nào khớp với "${subSel}" trên trang/Popup đang mở.`);
       } else {
         alert(
-          `Chế độ dòng động (row:): Tìm thấy ${res.count} dòng có "${subSel}". Khi chạy thực tế, hệ thống sẽ tự khóa đúng 1 dòng nơi bạn vừa thao tác!`
+          `Chế độ dòng động (row:): Tìm thấy ${totalCount} dòng có "${subSel}". Khi chạy thực tế, hệ thống sẽ tự khóa đúng 1 dòng nơi bạn vừa thao tác!`
         );
       }
       return;
     }
 
-    try {
-      const res = await sendMessageToActivePage(state.activeTab, {
-        type: 'BATO_HIGHLIGHT_SELECTOR',
-        selector
-      });
-      if (!res || res.count === 0) {
-        alert(`❌ Không tìm thấy phần tử nào khớp với "${selector}" trên trang hiện tại.`);
-      } else if (res.count > 1) {
+    const { deliveredCount, totalCount } = await collectHighlightReports(targetTabs, {
+      type: 'BATO_HIGHLIGHT_SELECTOR',
+      selector,
+      isPopup,
+      popupType,
+      popupScope,
+      urlPattern,
+      ignorePopupContext
+    });
+
+    if (deliveredCount === 0) {
+      alert('Không thể kiểm tra trên trang này (hãy F5 lại trang web nếu vừa cài tiện ích).');
+      return;
+    }
+
+    if (totalCount === 0) {
+      if (isPopup) {
         alert(
-          `⚠️ Cảnh báo trùng lặp: Selector này đang khớp tới ${res.count} phần tử trên trang (đang đánh dấu màu cam #1 ➔ #${res.count} trên trang web).\n\nHãy dùng nút "🎯 Chọn" hoặc bổ sung vùng cha / nhãn chữ để khóa chính xác duy nhất 1 phần tử!`
+          `❌ Không tìm thấy phần tử nào khớp với "${selector}" bên trong Popup đang mở.\n\n💡 Lưu ý: Hãy mở Popup trên trang web lên trước rồi mới bấm 🔍 kiểm tra!`
+        );
+      } else {
+        alert(`❌ Không tìm thấy phần tử nào khớp với "${selector}" trên trang hiện tại.`);
+      }
+    } else if (totalCount > 1) {
+      alert(
+        `⚠️ Cảnh báo trùng lặp: Selector này đang khớp tới ${totalCount} phần tử (đang đánh dấu màu cam #1 ➔ #${totalCount}).\n\nHãy dùng nút "🎯 Chọn" hoặc bổ sung vùng cha / nhãn chữ để khóa chính xác duy nhất 1 phần tử!`
+      );
+    }
+  }
+
+  async function inspectPopupScopeOnActivePage() {
+    const scope = (document.getElementById('inpPopupScope')?.value || '').trim();
+    const pType = document.getElementById('selPopupType')?.value || 'auto';
+
+    const targetTabs = await getInteractiveTargetTabs();
+    if (targetTabs.length === 0) return;
+
+    const { totalCount, reports } = await collectHighlightReports(targetTabs, {
+      type: 'BATO_INSPECT_POPUP_SCOPE',
+      popupType: pType,
+      popupScope: scope
+    });
+
+    if (totalCount > 0) {
+      // Nếu là cửa sổ rời hoặc iframe thì hiện thông báo xác nhận rõ tên Popup đang khớp
+      if (pType === 'window_popup' || pType === 'iframe_popup') {
+        const labels = reports.map((r) => r.label).filter(Boolean);
+        alert(
+          `✅ Đã nhận diện khớp chính xác khung Popup đang mở${
+            labels.length ? `: "${labels[0]}"` : ''
+          }${scope ? ` (${scope})` : ''}!`
         );
       }
-    } catch (_) {
-      alert('Không thể kiểm tra trên trang này (hãy F5 lại trang web nếu vừa cài tiện ích).');
+      return;
+    }
+
+    if (!scope) {
+      alert(
+        '⚠️ Hiện chưa thấy khung Popup nào đang mở trên màn hình.\nHãy mở Popup trên trang web lên trước rồi bấm 🔍 kiểm tra!'
+      );
+    } else {
+      alert(
+        `⚠️ Chưa thấy khung/cửa sổ Popup nào đang mở khớp với "${scope}".\nHãy mở Popup trên trang web lên trước rồi mới bấm 🔍 kiểm tra!`
+      );
     }
   }
 
@@ -1859,14 +2093,39 @@
       'inpScenarioName',
       'selScenarioEnabled',
       'inpUrlPattern',
+      'selPopupType',
+      'inpPopupScope',
       'inpTriggerSelector',
       'selTriggerEvent',
       'inpTriggerWaitMs',
       'inpMaxSettleMs'
     ].forEach((id) => {
       const el = document.getElementById(id);
+      if (!el) return;
       el.addEventListener('input', saveDraftToStorage);
       el.addEventListener('change', saveDraftToStorage);
+    });
+
+    document.getElementById('chkIsPopup')?.addEventListener('change', () => {
+      updatePopupEditorVisibility();
+      saveDraftToStorage();
+    });
+
+    document.getElementById('selPopupTriggerMode')?.addEventListener('change', () => {
+      updatePopupEditorVisibility();
+      saveDraftToStorage();
+    });
+
+    document.getElementById('btnDetectPopup')?.addEventListener('click', () => {
+      startPickerOnActivePage(
+        'popupScope',
+        null,
+        'Khung Popup cần nhận diện (Click bất kỳ phần tử nào bên trong Popup)'
+      );
+    });
+
+    document.getElementById('btnHighlightPopupScope')?.addEventListener('click', () => {
+      inspectPopupScopeOnActivePage();
     });
 
     document.getElementById('chkWaitForSettled').addEventListener('change', (e) => {

@@ -157,9 +157,64 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 });
 
+function deriveUrlPatternFromParentUrl(rawUrl) {
+  if (!rawUrl) return '';
+  if (rawUrl.startsWith(chrome.runtime.getURL('demo/'))) {
+    return '*/demo/demo.html*';
+  }
+  if (
+    rawUrl.startsWith('chrome://') ||
+    rawUrl.startsWith('edge://') ||
+    rawUrl.startsWith('chrome-extension://') ||
+    rawUrl.startsWith('about:')
+  ) {
+    return '';
+  }
+  try {
+    const u = new URL(rawUrl);
+    if (u.protocol === 'file:') return u.pathname.split('/').pop() || '';
+    return `${u.origin}/*`;
+  } catch (_) {
+    return '';
+  }
+}
+
+async function broadcastStopPickerAllContexts() {
+  try {
+    const allTabs = await chrome.tabs.query({});
+    for (const t of allTabs) {
+      if (t.id) {
+        chrome.tabs.sendMessage(t.id, { type: 'BATO_STOP_PICKER' }).catch(() => {});
+      }
+    }
+  } catch (_) {}
+  chrome.runtime.sendMessage({ type: 'BATO_STOP_PICKER' }).catch(() => {});
+}
+
 // Lắng nghe các bản tin từ Content Script & Side Panel
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !message.type) return false;
+
+  // 0. Kiểm tra cửa sổ trình duyệt hiện tại có phải cửa sổ con tách rời (window.type === 'popup') không
+  if (message.type === 'BATO_CHECK_WINDOW_TYPE') {
+    (async () => {
+      try {
+        const winId = sender && sender.tab && sender.tab.windowId;
+        if (!winId) {
+          sendResponse({ isPopupWindow: false });
+          return;
+        }
+        const win = await chrome.windows.get(winId);
+        sendResponse({
+          isPopupWindow: Boolean(win && win.type === 'popup'),
+          windowType: win ? win.type : 'normal'
+        });
+      } catch (_) {
+        sendResponse({ isPopupWindow: false });
+      }
+    })();
+    return true;
+  }
 
   // 1. Yêu cầu thực thi Custom JS Script trong Sandbox
   if (message.type === 'BATO_EVAL_SCRIPT') {
@@ -183,17 +238,79 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // 2. Nhận phần tử được chọn từ công cụ Element Picker trên trang web
+  // 2. Nhận phần tử được chọn từ công cụ Element Picker trên trang web / Modal / Iframe / Cửa sổ Popup
   if (message.type === 'BATO_PICKER_SELECTED') {
     (async () => {
       try {
+        await broadcastStopPickerAllContexts();
+
         const store = await chrome.storage.local.get(['pickerSession', 'editorDraft']);
         const session = store.pickerSession;
         const draft = store.editorDraft;
 
+        // Bổ sung nhận diện cửa sổ rời window.type === 'popup' ngay cả khi trang bị mất window.opener (noopener)
+        const det =
+          message.popupDetection && typeof message.popupDetection === 'object'
+            ? { ...message.popupDetection }
+            : { isPopup: false, popupType: 'none', popupScope: '', popupLabel: '', parentUrl: '' };
+
+        if (!det.isPopup && sender && sender.tab && sender.tab.windowId) {
+          try {
+            const win = await chrome.windows.get(sender.tab.windowId);
+            if (win && win.type === 'popup') {
+              det.isPopup = true;
+              det.popupType = 'window_popup';
+              if (!det.popupScope && sender.tab.url && !sender.tab.url.startsWith('about:')) {
+                try {
+                  const u = new URL(sender.tab.url);
+                  if (u.pathname && u.pathname !== '/') {
+                    det.popupScope = `*${u.pathname}*`;
+                  }
+                } catch (_) {}
+              }
+              det.popupLabel = `🪟 Cửa sổ rời (${det.popupScope || sender.tab.title || 'window.open'})`;
+            }
+          } catch (_) {}
+        }
+
         if (session && draft) {
-          if (session.field === 'trigger') {
+          if (session.field === 'popupScope') {
+            draft.isPopup = true;
+            if (det.isPopup && det.popupType && det.popupType !== 'none') {
+              draft.popupType = det.popupType;
+              draft.popupScope = det.popupScope || message.selector || '';
+            } else {
+              draft.popupType = 'dom_modal';
+              draft.popupScope = message.selector || '';
+            }
+            if (!draft.urlPattern && det.parentUrl) {
+              const suggested = deriveUrlPatternFromParentUrl(det.parentUrl);
+              if (suggested) draft.urlPattern = suggested;
+            }
+          } else if (session.field === 'trigger') {
             draft.triggerSelector = message.selector;
+            if (det.isPopup && det.popupType && det.popupType !== 'none') {
+              draft.isPopup = true;
+              draft.popupType = det.popupType;
+              if (det.popupScope) {
+                draft.popupScope = det.popupScope;
+              }
+              if (det.parentUrl) {
+                const parentSuggested = deriveUrlPatternFromParentUrl(det.parentUrl);
+                // Giữ nguyên URL Target gốc nếu người dùng đã nhập; nếu chưa nhập hoặc lỡ lấy URL con của popup thì gán URL trang mẹ
+                if (
+                  parentSuggested &&
+                  (!draft.urlPattern ||
+                    (sender &&
+                      sender.tab &&
+                      sender.tab.url &&
+                      sender.tab.url !== det.parentUrl &&
+                      draft.urlPattern.includes(new URL(sender.tab.url).pathname)))
+                ) {
+                  draft.urlPattern = parentSuggested;
+                }
+              }
+            }
           } else if (session.field === 'modalTarget' && draft.activeRuleModal && draft.activeRuleModal.ruleData) {
             draft.activeRuleModal.ruleData.selector = message.selector;
             if (message.suggestedAction && draft.activeRuleModal.ruleData.actionType === 'auto') {
@@ -221,7 +338,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             .sendMessage({
               type: 'BATO_DRAFT_UPDATED_FROM_PICKER',
               draft,
-              selector: message.selector
+              selector: message.selector,
+              popupDetection: det
             })
             .catch(() => {});
         } else {
@@ -239,11 +357,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // 3. Hủy chế độ Picker
+  // 3. Hủy chế độ Picker đồng bộ trên toàn bộ Tab & Frame
   if (message.type === 'BATO_PICKER_CANCELLED') {
-    chrome.storage.local.set({ pickerSession: null }).then(() => {
+    (async () => {
+      await broadcastStopPickerAllContexts();
+      await chrome.storage.local.set({ pickerSession: null });
       sendResponse({ ok: true });
-    });
+    })();
     return true;
   }
 

@@ -236,6 +236,54 @@
     .select2-container--default .select2-selection--single .select2-selection__arrow {
       height: 32px !important;
     }
+
+    .hidden { display: none !important; }
+    .btn-indigo { background: #4f46e5; color: #fff; }
+    .btn-indigo:hover { background: #4338ca; }
+    .popup-demo-btns {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 4px;
+    }
+    .his-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.52);
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .his-modal-dialog {
+      background: #ffffff;
+      border-radius: 10px;
+      width: 100%;
+      max-width: 600px;
+      box-shadow: 0 20px 40px rgba(15, 23, 42, 0.28);
+      border: 1px solid #cbd5e1;
+      overflow: hidden;
+    }
+    .his-modal-header {
+      background: #1e1b4b;
+      color: #ffffff;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .his-modal-header h3 { font-size: 14.5px; font-weight: 700; }
+    .his-modal-body { padding: 14px 16px; }
+    .his-modal-footer {
+      padding: 10px 16px;
+      background: #f8fafc;
+      border-top: 1px solid #e2e8f0;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
   </style>
 </head>
 <body>
@@ -244,13 +292,13 @@
       <img src="../icons/icon128.png" alt="VP" />
       <div>
         <h1>🧪 BATO_SMART_FILL — Phòng Kiểm Thử Toàn Diện (Tích hợp sẵn 100% Offline)</h1>
-        <p>Kiểm thử mọi trường hợp Chọn Element động (không ID / trùng thuộc tính / bảng nhiều dòng) &amp; đủ 4 Phương thức Rule + Chờ API ngầm</p>
+        <p>Kiểm thử Chọn Element động • Đủ 4 Phương thức Rule • Chờ API ngầm • Tự nhận diện &amp; Thực thi trên đủ 3 loại Popup</p>
       </div>
     </div>
     <div class="header-actions">
       <button type="button" id="btnRestoreDemoScenarios" class="btn btn-emerald"
-        title="Nạp hoặc khôi phục lại 4 kịch bản mẫu gốc vào Extension">
-        ⚡ Nạp / Khôi phục 4 Kịch bản mẫu
+        title="Nạp hoặc khôi phục lại trọn bộ 7 kịch bản mẫu gốc vào Extension">
+        ⚡ Nạp / Khôi phục 7 Kịch bản mẫu
       </button>
       <a href="./demo-scenarios.json" download="BATO_SMART_FILL_demo_scenarios.json" class="btn btn-outline"
         title="Tải file .json mẫu để test tính năng Nhập / Chống trùng lặp">
@@ -261,13 +309,13 @@
   </header>
 
   <div class="guide-banner">
-    <b>💡 Đã nạp sẵn 4 Kịch bản mẫu vào BATO_SMART_FILL bên phải màn hình!</b>
-    Bạn có thể trải nghiệm ngay:
-    1️⃣ Sửa <b>Năm sinh</b> (Khối 1: <code>2022</code>, <code>2012</code>, <code>1990</code>, <code>1955</code>) rồi nhấn <code>Tab</code>
+    <b>💡 Đã nạp sẵn 7 Kịch bản mẫu (4 Kịch bản Trang chính + 3 Kịch bản Popup) vào BATO_SMART_FILL!</b>
+    Trải nghiệm ngay:
+    1️⃣ Sửa <b>Năm sinh</b> (Khối 1: <code>2022</code>, <code>1955</code>)
     • 2️⃣ Nhập <b>Nhiệt độ</b> (Khối 2: <code>39</code>)
-    • 3️⃣ Đổi <b>Đường dùng</b> ở từng dòng thuốc (Khối 3)
+    • 3️⃣ Đổi <b>Đường dùng</b> (Khối 3)
     • 4️⃣ Chọn <b>Hội chứng</b> (Khối 4)
-    — Hoặc bấm <b>🎯 Chọn</b> / <b>🔍</b> trên Extension để thử bắt bất kỳ phần tử nào!
+    • 5️⃣ Mở thử cả <b>3 loại Popup</b> ở Khối 5 bên dưới!
   </div>
 
   <div class="grid-2">
@@ -472,6 +520,115 @@
         </div>
       </div>
     </section>
+  </div>
+
+  <!-- KHỐI 5: KIỂM THỬ THỰC THI & TỰ ĐỘNG NHẬN DIỆN ĐỦ 3 LOẠI POPUP -->
+  <section id="boxPopupLab" class="card" style="margin-bottom: 14px; border-color: #a5b4fc; background: linear-gradient(180deg, #ffffff 0%, #f5f3ff 100%);">
+    <div class="card-head">
+      <div>
+        <div class="card-title">5. 🪟 Kiểm thử Thực thi trên Popup &amp; Tự động Nhận diện cả 3 Tình huống Popup (Giữ nguyên URL trang mẹ)</div>
+        <div class="card-sub">
+          Mọi kịch bản Popup dưới đây đều giữ nguyên URL mục tiêu là <code>*/demo/demo.html*</code>, tự khóa chặt phạm vi trong Popup và hỗ trợ kích hoạt <b>🚀 Ngay khi Popup vừa mở</b> hoặc <b>⚡ Khi thao tác Element trong Popup</b>!
+        </div>
+      </div>
+      <span class="tag-case purple">3 Loại Popup + Auto-Detect</span>
+    </div>
+
+    <div class="popup-demo-btns">
+      <button type="button" id="btnOpenDomModal" class="btn btn-indigo">
+        💬 1. Mở Modal HTML ("Phiếu Chuyển Tuyến" — Tự điền ngay khi mở + Chờ API 400ms)
+      </button>
+      <button type="button" id="btnOpenIframePopup" class="btn btn-sky">
+        🖼️ 2. Mở Popup Iframe ("Chỉ định Cận lâm sàng" — Kế thừa URL mẹ)
+      </button>
+      <button type="button" id="btnOpenWindowPopup" class="btn btn-emerald">
+        🪟 3. Mở Cửa sổ rời window.open ("Giấy Ra Viện" — Tự nhận diện cửa sổ con)
+      </button>
+    </div>
+  </section>
+
+  <!-- OVERLAY LOẠI 1: MODAL HTML NỔI TRÊN CÙNG TRANG (#modalChuyenTuyen) -->
+  <div id="modalChuyenTuyenBackdrop" class="his-modal-backdrop hidden">
+    <div id="modalChuyenTuyen" class="his-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="modalChuyenTuyenTitle">
+      <div class="his-modal-header">
+        <h3 id="modalChuyenTuyenTitle">💬 Phiếu Chuyển Tuyến Khám Chữa Bệnh (Modal HTML)</h3>
+        <button type="button" id="btnCloseDomModalTop" class="btn btn-outline" style="padding:3px 9px;">✕</button>
+      </div>
+      <div class="his-modal-body">
+        <div style="margin-bottom: 10px;">
+          <div id="modalApiStatus" class="api-status">⚡ Khi mở Modal, Web gọi API ngầm 400ms cấp Mã hồ sơ chuyển tuyến...</div>
+        </div>
+
+        <div class="form-grid">
+          <div class="field">
+            <label for="txtModalMaHS">
+              <span>Mã hồ sơ chuyển tuyến (API 400ms)</span>
+              <span class="hint-chip">#txtModalMaHS</span>
+            </label>
+            <input type="text" id="txtModalMaHS" readonly placeholder="Đang tải từ API..." />
+          </div>
+
+          <div class="field">
+            <label>
+              <span>Tuyến bệnh viện chuyển đến</span>
+              <span class="hint-chip">name="TuyenChuyen"</span>
+            </label>
+            <select name="TuyenChuyen">
+              <option value="">-- Chưa chọn tuyến --</option>
+              <option value="TW">Tuyến Trung ương (Bệnh viện Chợ Rẫy / Bạch Mai)</option>
+              <option value="TINH">Bệnh viện Đa khoa Tuyến Tỉnh</option>
+              <option value="HUYEN">Trung tâm Y tế Tuyến Huyện</option>
+            </select>
+          </div>
+
+          <div class="field col-span-2">
+            <label>
+              <span>Phương tiện vận chuyển cấp cứu</span>
+              <span class="hint-chip">name="PhuongTienVC"</span>
+            </label>
+            <select name="PhuongTienVC">
+              <option value="">-- Chưa chọn phương tiện --</option>
+              <option value="XE_CC">Xe cứu thương chuyên dụng của Bệnh viện</option>
+              <option value="TU_TUC">Phương tiện tự túc của gia đình</option>
+            </select>
+          </div>
+
+          <div class="field col-span-2">
+            <label>
+              <span>Ghi chú chuyển tuyến (Cố tình trùng <code>name="GhiChu"</code> với 2 ô nền trang!)</span>
+              <span class="hint-chip">Chỉ điền trong Modal!</span>
+            </label>
+            <input type="text" class="form-control" name="GhiChu" placeholder="Tự động điền sau khi API 400ms tải xong (2 ô GhiChu nền trang không bị đụng!)" />
+          </div>
+        </div>
+      </div>
+      <div class="his-modal-footer">
+        <button type="button" id="btnClearDomModal" class="btn btn-outline">🔄 Xóa trắng các ô trong Modal</button>
+        <button type="button" id="btnCloseDomModal" class="btn btn-indigo">Đóng Modal</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- OVERLAY LOẠI 2: KHUNG POPUP NHÚNG BẰNG <IFRAME> (#frmChiDinhCLS) -->
+  <div id="modalIframeBackdrop" class="his-modal-backdrop hidden">
+    <div class="his-modal-dialog" style="max-width: 660px;" role="dialog" aria-modal="true">
+      <div class="his-modal-header" style="background: #0c4a6e;">
+        <h3>🖼️ Chỉ định Cận lâm sàng (Popup nhúng &lt;iframe id="frmChiDinhCLS"&gt;)</h3>
+        <button type="button" id="btnCloseIframePopupTop" class="btn btn-outline" style="padding:3px 9px;">✕</button>
+      </div>
+      <div class="his-modal-body" style="padding: 0;">
+        <iframe
+          id="frmChiDinhCLS"
+          name="frmChiDinhCLS"
+          src="about:blank"
+          title="Chỉ định Cận lâm sàng"
+          style="width: 100%; height: 310px; border: none; display: block;"
+        ></iframe>
+      </div>
+      <div class="his-modal-footer">
+        <button type="button" id="btnCloseIframePopup" class="btn btn-sky">Đóng Popup Iframe</button>
+      </div>
+    </div>
   </div>
 
   <!-- BẢNG ĐỐI CHIẾU NHANH 7 CASE CHỌN ELEMENT -->

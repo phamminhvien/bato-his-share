@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chỉ định Cận lâm sàng (Iframe Popup)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f8fafc;
+      color: #0f172a;
+      padding: 14px 16px;
+      font-size: 13px;
+    }
+    .iframe-banner {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      color: #1e40af;
+      padding: 8px 11px;
+      border-radius: 7px;
+      font-size: 12px;
+      margin-bottom: 12px;
+      line-height: 1.45;
+    }
+    .iframe-banner code {
+      background: #dbeafe;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-family: Consolas, monospace;
+      font-weight: 600;
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 12px;
+    }
+    .col-span-2 { grid-column: span 2; }
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .field label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #334155;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .chip {
+      font-size: 10px;
+      background: #e2e8f0;
+      color: #475569;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-family: Consolas, monospace;
+    }
+    input[type="text"], select {
+      width: 100%;
+      padding: 7px 9px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 13px;
+      background: #fff;
+      color: #0f172a;
+      outline: none;
+    }
+    input:focus, select:focus {
+      border-color: #0284c7;
+      box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15);
+    }
+    .chk-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-top: 4px;
+      cursor: pointer;
+      font-weight: 600;
+      color: #0f172a;
+    }
+    .actions {
+      margin-top: 12px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .btn {
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid #cbd5e1;
+      background: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      color: #334155;
+    }
+    .btn:hover { background: #f1f5f9; }
+  </style>
+</head>
+<body>
+  <div class="iframe-banner">
+    🖼️ Đây là trang con nhúng trong thẻ <code>&lt;iframe id="frmChiDinhCLS"&gt;</code>.
+    Dù URL riêng là <code>popup-iframe.html</code>, kịch bản <b>[Demo 6]</b> vẫn giữ nguyên URL trang mẹ <code>*/demo/demo.html*</code>!
+    Hãy thử chọn <b>Nhóm dịch vụ CLS</b> hoặc dùng nút <b>🎯 Chọn</b> rê vào đây.
+  </div>
+
+  <div class="form-grid">
+    <div class="field">
+      <label for="cboNhomCLS">
+        <span>Nhóm dịch vụ CLS (Trigger) *</span>
+        <span class="chip">#cboNhomCLS</span>
+      </label>
+      <select id="cboNhomCLS">
+        <option value="">-- Chọn nhóm dịch vụ --</option>
+        <option value="XN_MAU">Xét nghiệm máu tổng quát</option>
+        <option value="SIEU_AM">Siêu âm ổ bụng tổng quát</option>
+        <option value="XQUANG">Chụp X-Quang tim phổi thẳng</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="cboPhongThucHien">
+        <span>Phòng thực hiện (Tự chọn)</span>
+        <span class="chip">#cboPhongThucHien</span>
+      </label>
+      <select id="cboPhongThucHien">
+        <option value="">-- Chưa chọn phòng --</option>
+        <option value="P_XN_T1">Phòng Xét nghiệm Sinh hóa - Tầng 1</option>
+        <option value="P_CDHA_T2">Phòng Siêu âm CĐHA - Tầng 2</option>
+        <option value="P_XQ_T1">Phòng X-Quang Kỹ thuật số - Tầng 1</option>
+      </select>
+    </div>
+
+    <div class="field col-span-2">
+      <label>
+        <span>Chỉ dẫn chuẩn bị bệnh nhân (Tự điền theo nhóm CLS)</span>
+        <span class="chip">name="ChiDanCLS"</span>
+      </label>
+      <input type="text" name="ChiDanCLS" placeholder="Tự động điền hướng dẫn nhịn ăn / nhịn tiểu / tháo kim loại..." />
+    </div>
+
+    <div class="field col-span-2">
+      <label class="chk-row">
+        <input type="checkbox" name="CapCuuCLS" style="width:16px; height:16px;" />
+        <span>⚡ Ưu tiên xét nghiệm khẩn (Tự động bật khi chọn Xét nghiệm máu)</span>
+      </label>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button type="button" id="btnResetChildForm" class="btn">🔄 Xóa trắng form Iframe</button>
+  </div>
+
+  <script src="mock-his-server.js"></script>
+  <script src="../content/page-network-monitor.js"></script>
+  <script src="../plugins/custom-plugins.js"></script>
+  <script src="../content/content.js"></script>
+  <script src="popup-child.js"></script>
+</body>
+</html>

@@ -133,19 +133,75 @@
               Hỗ trợ gõ một phần địa chỉ, ký tự đại diện <code>*</code>, hoặc biểu thức chính quy <code>/regex/</code>.
             </div>
           </div>
+
+          <!-- TÙY CHỌN THỰC THI TRÊN POPUP & TỰ ĐỘNG PHÁT HIỆN -->
+          <div class="popup-config-box mt-8">
+            <div class="popup-config-head">
+              <label class="checkbox-row" style="font-weight: 600; color: #0f172a;">
+                <input type="checkbox" id="chkIsPopup" />
+                <span>🪟 Thực thi trên Popup mở ra từ URL này</span>
+              </label>
+              <button type="button" id="btnDetectPopup" class="btn btn-accent btn-xs"
+                title="Mở Popup trên trang web rồi bấm nút này click vào bất kỳ đâu trong Popup để tự động nhận diện loại &amp; khóa vùng Popup!">
+                🎯 Nhận diện Popup
+              </button>
+            </div>
+
+            <div id="popupDetectedBanner" class="popup-detected-banner hidden"></div>
+
+            <div id="popupConfigDetails" class="popup-config-details hidden">
+              <div class="form-row mt-8">
+                <div class="form-col flex-1">
+                  <label class="field-label">Loại Popup</label>
+                  <select id="selPopupType" class="inp">
+                    <option value="auto">✨ Tự động nhận diện</option>
+                    <option value="dom_modal">💬 Hộp thoại nổi HTML (Modal / Dialog)</option>
+                    <option value="iframe_popup">🖼️ Khung Popup nhúng (Iframe / about:blank)</option>
+                    <option value="window_popup">🪟 Cửa sổ trình duyệt rời (window.open)</option>
+                  </select>
+                </div>
+                <div class="form-col flex-1">
+                  <label class="field-label">Thời điểm kích hoạt</label>
+                  <select id="selPopupTriggerMode" class="inp">
+                    <option value="element_event">⚡ Khi thao tác ô Trigger trong Popup</option>
+                    <option value="on_open">🚀 Ngay khi Popup vừa mở lên</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group mt-8">
+                <label class="field-label">Khóa nhận diện riêng Popup (Selector Modal / Đường dẫn / Tiêu đề)</label>
+                <div class="input-action-group">
+                  <input type="text" id="inpPopupScope" class="inp mono"
+                    placeholder="Tự điền khi bấm 🎯 Chọn (VD: #modalKeVatTu, */PopupCLS*, title:Chuyển viện)" />
+                  <button type="button" id="btnHighlightPopupScope" class="btn btn-outline btn-sm"
+                    title="Kiểm tra khung Popup trên trang hiện tại">
+                    🔍
+                  </button>
+                </div>
+                <div class="field-hint">
+                  Khóa chặt các Rule chỉ điền bên trong đúng Popup này, không chạm nhầm sang trang nền hay Popup khác trên cùng URL.
+                </div>
+              </div>
+            </div>
+          </div>
         </section>
 
         <!-- KHỐI 2: ELEMENT CHÍNH BẮT SỰ KIỆN (TRIGGER) -->
         <section class="card-section">
           <div class="section-title">2. Element chính để bắt sự kiện (Trigger)</div>
 
-          <div class="form-group">
-            <label class="field-label">Selector phần tử nguồn <span class="req">*</span></label>
+          <div id="popupOnOpenHint" class="popup-open-hint hidden">
+            🚀 Đang chọn kích hoạt <b>Ngay khi Popup vừa mở lên</b> — không bắt buộc chọn phần tử Trigger riêng! Các Rule bên dưới sẽ tự động điền ngay khi Popup hiển thị và tải xong API.
+          </div>
+
+          <div id="triggerSelectorGroup" class="form-group">
+            <label class="field-label">Selector phần tử nguồn <span id="lblTriggerReqStar" class="req">*</span></label>
             <div class="input-action-group">
               <input type="text" id="inpTriggerSelector" class="inp mono"
                 placeholder="VD: #id_element, .class_name, [name='field_name']" />
               <button type="button" id="btnPickTrigger" class="btn btn-accent btn-sm"
-                title="Click trực tiếp lên phần tử trên trang web bên trái để lấy Selector">
+                title="Click trực tiếp lên phần tử trên trang web / Popup để lấy Selector &amp; tự nhận diện loại Popup">
                 🎯 Chọn
               </button>
               <button type="button" id="btnHighlightTrigger" class="btn btn-outline btn-sm"
@@ -156,7 +212,7 @@
           </div>
 
           <div class="form-row mt-8">
-            <div class="form-col flex-1">
+            <div id="triggerEventCol" class="form-col flex-1">
               <label class="field-label">Sự kiện kích hoạt</label>
               <select id="selTriggerEvent" class="inp">
                 <option value="auto">✨ Tự động thông minh (onchange + blur + input)</option>
@@ -165,6 +221,7 @@
                 <option value="input">input — Ngay khi đang gõ phím</option>
                 <option value="enter">enter — Khi nhấn phím Enter</option>
                 <option value="click">click — Khi nhấp chuột vào phần tử</option>
+                <option value="appear">appear — Khi phần tử xuất hiện trên màn hình</option>
               </select>
             </div>
             <div class="form-col" style="width: 110px;">

@@ -222,7 +222,88 @@
     window.location.reload();
   });
 
-  // 6. Nút Nạp / Khôi phục 4 kịch bản mẫu gốc trực tiếp vào chrome.storage.local
+  // 6. Kiểm thử đủ 3 loại Popup (Modal HTML + Iframe Popup + Cửa sổ rời window.open)
+  let modalOpenSeq = 8800;
+  const domModalBackdrop = document.getElementById('modalChuyenTuyenBackdrop');
+  const txtModalMaHS = document.getElementById('txtModalMaHS');
+  const modalApiStatus = document.getElementById('modalApiStatus');
+
+  function clearDomModalFields() {
+    const modal = document.getElementById('modalChuyenTuyen');
+    if (!modal) return;
+    modal.querySelectorAll('select').forEach((s) => {
+      s.selectedIndex = 0;
+    });
+    modal.querySelectorAll('input:not([readonly])').forEach((inp) => {
+      inp.value = '';
+    });
+    if (txtModalMaHS) txtModalMaHS.value = '';
+  }
+
+  document.getElementById('btnOpenDomModal')?.addEventListener('click', async () => {
+    if (!domModalBackdrop) return;
+    clearDomModalFields();
+
+    const startAt = Date.now();
+    const nextCode = 'HS-2026-' + ++modalOpenSeq;
+    if (txtModalMaHS) txtModalMaHS.setAttribute('aria-busy', 'true');
+    if (modalApiStatus) {
+      modalApiStatus.className = 'api-status busy';
+      modalApiStatus.textContent = '⏳ Modal vừa mở: Đang gọi API /api/his/calc-age (400ms) để cấp Mã hồ sơ...';
+    }
+
+    // Gọi API ngầm ngay thời điểm bật Modal để kiểm chứng cơ chế waitForSettled + on_open
+    const apiPromise = fetch('/api/his/calc-age?year=1980&delay=400').catch(() => null);
+    domModalBackdrop.classList.remove('hidden');
+
+    await apiPromise;
+    if (txtModalMaHS) {
+      txtModalMaHS.value = nextCode;
+      txtModalMaHS.removeAttribute('aria-busy');
+    }
+    if (modalApiStatus) {
+      modalApiStatus.className = 'api-status done';
+      modalApiStatus.textContent = `✅ Đã cấp Mã hồ sơ ${nextCode} sau ${Date.now() - startAt}ms — Kịch bản [Demo 5] tự điền ngay sau khi API xong!`;
+    }
+  });
+
+  const closeDomModal = () => {
+    domModalBackdrop?.classList.add('hidden');
+  };
+  document.getElementById('btnCloseDomModal')?.addEventListener('click', closeDomModal);
+  document.getElementById('btnCloseDomModalTop')?.addEventListener('click', closeDomModal);
+  document.getElementById('btnClearDomModal')?.addEventListener('click', clearDomModalFields);
+
+  // Loại 2: Mở / Đóng Popup nhúng <iframe>
+  const iframeBackdrop = document.getElementById('modalIframeBackdrop');
+  const frmChiDinhCLS = document.getElementById('frmChiDinhCLS');
+
+  document.getElementById('btnOpenIframePopup')?.addEventListener('click', () => {
+    if (frmChiDinhCLS) {
+      frmChiDinhCLS.src = './popup-iframe.html';
+    }
+    iframeBackdrop?.classList.remove('hidden');
+  });
+
+  const closeIframeModal = () => {
+    iframeBackdrop?.classList.add('hidden');
+    if (frmChiDinhCLS) {
+      frmChiDinhCLS.src = 'about:blank';
+    }
+  };
+  document.getElementById('btnCloseIframePopup')?.addEventListener('click', closeIframeModal);
+  document.getElementById('btnCloseIframePopupTop')?.addEventListener('click', closeIframeModal);
+
+  // Loại 3: Mở Cửa sổ Popup rời bằng window.open
+  document.getElementById('btnOpenWindowPopup')?.addEventListener('click', () => {
+    window.open(
+      './popup-window.html',
+      'BatoPopupGiayRaVien',
+      'popup=yes,width=660,height=520,left=160,top=120'
+    );
+  });
+
+  // 7. Nút Nạp / Khôi phục 7 kịch bản mẫu gốc trực tiếp vào chrome.storage.local
   document.getElementById('btnRestoreDemoScenarios')?.addEventListener('click', async () => {
     try {
       const resp = await fetch('./demo-scenarios.json');
@@ -246,7 +327,7 @@
         rules: [...demoList, ...keptOthers]
       });
 
-      alert('✅ Đã nạp / khôi phục nguyên bản 4 Kịch bản Demo mẫu vào BATO_SMART_FILL!');
+      alert(`✅ Đã nạp / khôi phục nguyên bản ${demoList.length} Kịch bản Demo mẫu (gồm cả 3 loại Popup) vào BATO_SMART_FILL!`);
     } catch (err) {
       alert('Không thể nạp kịch bản mẫu: ' + (err && err.message ? err.message : String(err)));
     }

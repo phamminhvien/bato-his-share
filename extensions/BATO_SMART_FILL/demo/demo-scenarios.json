@@ -1,13 +1,14 @@
 {
   "app": "BATO_SMART_FILL",
   "version": "1.3.0",
-  "exportedAt": "2026-11-01T15:20:00.000Z",
+  "exportedAt": "2026-11-01T16:45:00.000Z",
   "scenarios": [
     {
       "id": "scn_demo_1_full_methods",
       "name": "[Demo 1] Tiếp nhận + Chờ API 550ms (Đủ 4 Phương thức Rule)",
       "enabled": true,
       "urlPattern": "*/demo/demo.html*",
+      "isPopup": false,
       "triggerSelector": "#txtNamSinh",
       "triggerEvent": "auto",
       "triggerWaitMs": 0,
@@ -84,6 +85,7 @@
       "name": "[Demo 2] Sinh hiệu JS không ID/Name, Ô đôi Huyết áp & Chống trùng vùng",
       "enabled": true,
       "urlPattern": "*/demo/demo.html*",
+      "isPopup": false,
       "triggerSelector": "(//label[normalize-space(.)=\"Nhiệt độ (°C)\"]/following::input)[1]",
       "triggerEvent": "auto",
       "triggerWaitMs": 0,
@@ -154,6 +156,7 @@
       "name": "[Demo 3] Bảng Kê đơn thuốc động nhiều dòng giống hệt nhau (row:)",
       "enabled": true,
       "urlPattern": "*/demo/demo.html*",
+      "isPopup": false,
       "triggerSelector": "#tblDonThuoc select.cbo-duong-dung",
       "triggerEvent": "auto",
       "triggerWaitMs": 0,
@@ -209,6 +212,7 @@
       "name": "[Demo 4] Gợi ý lâm sàng -> Tự tìm mã ICD-10 Select2 AJAX (Plugin JS)",
       "enabled": true,
       "urlPattern": "*/demo/demo.html*",
+      "isPopup": false,
       "triggerSelector": "#cboGoiYLamSang",
       "triggerEvent": "auto",
       "triggerWaitMs": 0,
@@ -226,6 +230,229 @@
           "pluginParams": "{\n  \"mode\": \"ui_search\",\n  \"keywordMap\": {\n    \"SXH\": \"A97\",\n    \"THA\": \"I10\",\n    \"VIEM_HONG\": \"J02\"\n  }\n}"
         }
       ]
+    },
+    {
+      "id": "scn_demo_5_popup_dom_modal_open",
+      "name": "[Demo 5 - Popup Modal] Tự điền ngay khi mở Phiếu Chuyển Tuyến (Chờ API 400ms)",
+      "enabled": true,
+      "urlPattern": "*/demo/demo.html*",
+      "isPopup": true,
+      "triggerSelector": "",
+      "triggerEvent": "auto",
+      "triggerWaitMs": 0,
+      "waitForSettled": true,
+      "maxSettleMs": 3000,
+      "targets": [
+        {
+          "id": "rule_d5_tuyen_chuyen",
+          "enabled": true,
+          "selector": "select[name=\"TuyenChuyen\"]",
+          "actionType": "select_value",
+          "delayMs": 0,
+          "mode": "fixed",
+          "fixedValue": "TW",
+          "keepValues": "",
+          "onlyIfEmpty": true
+        },
+        {
+          "id": "rule_d5_phuong_tien",
+          "enabled": true,
+          "selector": "select[name=\"PhuongTienVC\"]",
+          "actionType": "select_value",
+          "delayMs": 0,
+          "mode": "fixed",
+          "fixedValue": "XE_CC",
+          "keepValues": "",
+          "onlyIfEmpty": true
+        },
+        {
+          "id": "rule_d5_modal_ghichu_scoped",
+          "enabled": true,
+          "selector": "input[name=\"GhiChu\"]",
+          "actionType": "input",
+          "delayMs": 0,
+          "mode": "script",
+          "scriptCode": "(_triggerVal, { getVal }) => {\n  const maHS = getVal('#txtModalMaHS') || 'N/A';\n  return `Chuyển tuyến cấp cứu [${maHS}] — Đã khóa chặt trong Modal, 2 ô GhiChu nền trang an toàn!`;\n}"
+        }
+      ],
+      "popupType": "dom_modal",
+      "popupScope": "#modalChuyenTuyen",
+      "popupTriggerMode": "on_open"
+    },
+    {
+      "id": "scn_demo_6_popup_iframe_cls",
+      "name": "[Demo 6 - Popup Iframe] Chỉ định Cận lâm sàng trong <iframe> (Kế thừa URL mẹ)",
+      "enabled": true,
+      "urlPattern": "*/demo/demo.html*",
+      "isPopup": true,
+      "triggerSelector": "#cboNhomCLS",
+      "triggerEvent": "auto",
+      "triggerWaitMs": 0,
+      "waitForSettled": false,
+      "maxSettleMs": 2000,
+      "targets": [
+        {
+          "id": "rule_d6_phong_th",
+          "enabled": true,
+          "selector": "#cboPhongThucHien",
+          "actionType": "select_value",
+          "delayMs": 0,
+          "mode": "mapping",
+          "mappings": [
+            {
+              "sourceSelector": "",
+              "operator": "eq",
+              "matchValue": "XN_MAU",
+              "resultAction": "fill",
+              "outputValue": "P_XN_T1"
+            },
+            {
+              "sourceSelector": "",
+              "operator": "eq",
+              "matchValue": "SIEU_AM",
+              "resultAction": "fill",
+              "outputValue": "P_CDHA_T2"
+            },
+            {
+              "sourceSelector": "",
+              "operator": "eq",
+              "matchValue": "XQUANG",
+              "resultAction": "fill",
+              "outputValue": "P_XQ_T1"
+            }
+          ],
+          "mappingFallbackMode": "keep",
+          "mappingFallbackValue": ""
+        },
+        {
+          "id": "rule_d6_chidan_cls",
+          "enabled": true,
+          "selector": "input[name=\"ChiDanCLS\"]",
+          "actionType": "input",
+          "delayMs": 0,
+          "mode": "mapping",
+          "mappings": [
+            {
+              "sourceSelector": "",
+              "operator": "eq",
+              "matchValue": "XN_MAU",
+              "resultAction": "fill",
+              "outputValue": "Nhịn ăn sáng trước khi lấy máu xét nghiệm ít nhất 6 giờ"
+            },
+            {
+              "sourceSelector": "",
+              "operator": "eq",
+              "matchValue": "SIEU_AM",
+              "resultAction": "fill",
+              "outputValue": "Uống nhiều nước và nhịn tiểu trước siêu âm 30 phút"
+            },
+            {
+              "sourceSelector": "",
+              "operator": "eq",
+              "matchValue": "XQUANG",
+              "resultAction": "fill",
+              "outputValue": "Tháo toàn bộ vật dụng kim loại vùng ngực trước khi chụp"
+            }
+          ],
+          "mappingFallbackMode": "keep",
+          "mappingFallbackValue": ""
+        },
+        {
+          "id": "rule_d6_chk_capcuu",
+          "enabled": true,
+          "selector": "input[name=\"CapCuuCLS\"]",
+          "actionType": "checkbox",
+          "delayMs": 0,
+          "mode": "script",
+          "scriptCode": "(triggerVal) => {\n  if (!triggerVal) return null;\n  return triggerVal === 'XN_MAU';\n}"
+        }
+      ],
+      "popupType": "iframe_popup",
+      "popupScope": "#frmChiDinhCLS",
+      "popupTriggerMode": "element_event"
+    },
+    {
+      "id": "scn_demo_7_popup_window_open",
+      "name": "[Demo 7 - Popup Rời] Cấp Giấy Ra Viện trên cửa sổ window.open (Kế thừa URL mẹ)",
+      "enabled": true,
+      "urlPattern": "*/demo/demo.html*",
+      "isPopup": true,
+      "triggerSelector": "#cboKetQuaDieuTri",
+      "triggerEvent": "auto",
+      "triggerWaitMs": 0,
+      "waitForSettled": false,
+      "maxSettleMs": 2000,
+      "targets": [
+        {
+          "id": "rule_d7_ngay_nghi",
+          "enabled": true,
+          "selector": "input[name=\"SoNgayNghiBHXH\"]",
+          "actionType": "input",
+          "delayMs": 0,
+          "mode": "mapping",
+          "mappings": [
+            {
+              "sourceSelector": "",
+              "operator": "eq",
+              "matchValue": "KHOI",
+              "resultAction": "fill",
+              "outputValue": "3"
+            },
+            {
+              "sourceSelector": "",
+              "operator": "eq",
+              "matchValue": "DO_GIAM",
+              "resultAction": "fill",
+              "outputValue": "5"
+            },
+            {
+              "sourceSelector": "",
+              "operator": "eq",
+              "matchValue": "NANG_HON",
+              "resultAction": "fill",
+              "outputValue": "7"
+            }
+          ],
+          "mappingFallbackMode": "keep",
+          "mappingFallbackValue": ""
+        },
+        {
+          "id": "rule_d7_loidan_bs",
+          "enabled": true,
+          "selector": "input[name=\"LoiDanBacSi\"]",
+          "actionType": "input",
+          "delayMs": 0,
+          "mode": "mapping",
+          "mappings": [
+            {
+              "sourceSelector": "",
+              "operator": "eq",
+              "matchValue": "KHOI",
+              "resultAction": "fill",
+              "outputValue": "Uống thuốc đủ liều, sinh hoạt điều độ, tái khám khi có dấu hiệu bất thường"
+            },
+            {
+              "sourceSelector": "",
+              "operator": "eq",
+              "matchValue": "DO_GIAM",
+              "resultAction": "fill",
+              "outputValue": "Nghỉ ngơi tại nhà, tái khám đúng hẹn sau 5 ngày để kiểm tra lại"
+            },
+            {
+              "sourceSelector": "",
+              "operator": "eq",
+              "matchValue": "NANG_HON",
+              "resultAction": "fill",
+              "outputValue": "Chuyển tuyến điều trị tiếp, theo dõi sát dấu hiệu sinh tồn trên đường vận chuyển"
+            }
+          ],
+          "mappingFallbackMode": "keep",
+          "mappingFallbackValue": ""
+        }
+      ],
+      "popupType": "window_popup",
+      "popupScope": "*popup-window.html*",
+      "popupTriggerMode": "element_event"
     }
   ]
 }
