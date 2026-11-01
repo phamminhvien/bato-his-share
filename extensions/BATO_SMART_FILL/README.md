@@ -1,6 +1,6 @@
 # ⚡ BATO_SMART_FILL
 
-Tiện ích mở rộng trình duyệt (**Chrome / Microsoft Edge / Cốc Cốc / Brave** — chuẩn **Manifest V3**) giúp **tự động hóa nhập liệu thông minh theo ngữ cảnh** trên mọi phần mềm nền Web (đặc biệt tối ưu cho **HIS Bệnh viện, Cổng BHYT/BHXH, Dịch vụ công, ERP, CRM**).
+Tiện ích mở rộng trình duyệt (**Chrome / Microsoft Edge / Cốc Cốc / Brave** — chuẩn **Manifest V3**) giúp **tự động hóa nhập liệu thông minh theo ngữ cảnh** trên mọi phần mềm và cổng thông tin nền Web (**Y tế, Hành chính công, Giáo dục, Kế toán - Kho bạc, Thương mại - Kho vận, Nhân sự, Ngân hàng - CRM...**).
 
 - **Tác giả:** Vien Pham — IT Bệnh viện ĐKKV Ba Tơ ([Facebook](https://www.facebook.com/phamminhvien))
 
@@ -8,36 +8,50 @@ Tiện ích mở rộng trình duyệt (**Chrome / Microsoft Edge / Cốc Cốc 
 
 ---
 
-## 🎯 Bài toán thực tế & Công dụng trong công việc hằng ngày
+## 🎯 Bài toán chung & Các nhóm tình huống ứng dụng thực tế
 
-Trong thực tế vận hành tại bệnh viện, cơ quan và doanh nghiệp, phần lớn phần mềm Web nghiệp vụ (như **VNPT HIS, Viettel HIS, FPT eHospital, Medisoft, Cổng giám định BHYT, phần mềm Kế toán/Nhân sự...**) là hệ thống đóng của nhà cung cấp — **IT đơn vị không thể can thiệp sửa mã nguồn**, trong khi người dùng cuối mỗi ngày phải lặp đi lặp lại hàng trăm thao tác chọn/nhập rập khuôn, dễ bỏ sót hoặc nhầm lẫn.
+Trong thực tế vận hành tại cơ quan, đơn vị sự nghiệp, trường học và doanh nghiệp, phần lớn phần mềm Web nghiệp vụ là **hệ thống đóng của nhà cung cấp hoặc cổng dùng chung toàn quốc** — **IT cơ sở không thể sửa mã nguồn**, trong khi người dùng cuối mỗi ngày phải lặp đi lặp lại hàng trăm thao tác chọn/nhập rập khuôn, dễ bỏ sót hoặc nhầm lẫn.
 
-**BATO_SMART_FILL** đóng vai trò một lớp **"Trợ lý tự động hóa ngay trên trình duyệt"** giải quyết trực tiếp các tình huống thực tế:
+**BATO_SMART_FILL** đóng vai trò một **"Trợ lý tự động hóa ngay trên trình duyệt"**, áp dụng linh hoạt cho nhiều lĩnh vực:
 
-1. **🏥 Tiếp đón & Hành chính bệnh nhân (Đồng bộ chờ API tính tuổi của Web)**
-   - Khi gõ *Năm sinh / Ngày sinh*, phần mềm HIS thường mất vài trăm ms gọi API ngầm để tính ra ô *Tuổi*.
-   - Tiện ích tự động **chờ API và DOM của HIS chạy xong** rồi mới dựa vào *Tuổi* vừa tính để: điền sẵn *Quốc tịch = Việt Nam* (nếu đang trống), chọn đúng *Đối tượng* (`Trẻ em < 6 tuổi`, `BHYT`, `Người cao tuổi`), đổi *Nghề nghiệp* phù hợp độ tuổi (nhưng **tự giữ nguyên** nếu đang là nghề đặc thù như *Công an, Quân đội*), đồng thời tự mở ô Select2 AJAX gõ tìm *Phòng khám Nhi / Lão khoa*.
+### 1. 🏥 Nhóm Y tế (Bệnh viện, Trung tâm Y tế, Phòng khám, Trạm Y tế)
+*Áp dụng trên: VNPT HIS, Viettel HIS, FPT eHospital, Medisoft, LIS/PACS, Cổng giám định BHYT, Hồ sơ sức khỏe điện tử...*
+- **Tiếp đón & Hành chính bệnh nhân**: Nhập *Năm sinh / Ngày sinh* ➔ Tiện ích tự **chờ API tính Tuổi của HIS chạy xong** rồi mới điền *Quốc tịch = Việt Nam* (nếu trống), chọn *Đối tượng* (`Trẻ em < 6 tuổi`, `BHYT`, `Người cao tuổi`), đổi *Nghề nghiệp* theo độ tuổi (nhưng **tự giữ nguyên** nghề đặc thù như *Công an, Quân đội*) và tự gõ tìm *Phòng khám Nhi / Lão khoa* trên ô Select2 AJAX.
+- **Khám bệnh, Sinh hiệu & Mã bệnh ICD-10**: Nhập *Nhiệt độ, Mạch, Huyết áp* ➔ Tự điền nhận xét vào *Ghi chú khám* (không đụng nhầm ô *Ghi chú* của tab Hành chính) và tick *Cảnh báo sốt cao / Tăng huyết áp*; chọn gợi ý lâm sàng ➔ Tự mở Select2 AJAX tìm mã *ICD-10*.
+- **Bảng kê đơn thuốc & Vật tư nhiều dòng động (`row:`)**: Đổi *Đường dùng* (`Uống` / `Tiêm` / `Bôi`) hoặc sửa *Sáng - Tối - Số ngày* ở dòng thuốc nào ➔ Tự điền *Cách dùng chuẩn* và tính *Tổng số lượng* cho riêng dòng đó.
+- **Popup phiếu chuyên môn (`Modal` / `Iframe` / `window.open`)**: Vừa bấm mở *Phiếu chuyển tuyến, Chỉ định Cận lâm sàng, Giấy ra viện, Giấy chứng sinh* ➔ Tự điền sẵn *Tuyến chuyển, Phương tiện vận chuyển, Phòng thực hiện, Số ngày nghỉ BHXH, Lời dặn bác sĩ*.
 
-2. **🩺 Khám bệnh, Sinh hiệu & Ràng buộc cảnh báo lâm sàng**
-   - Khi điều dưỡng/bác sĩ nhập *Nhiệt độ, Mạch, Huyết áp*: tự động điền gợi ý theo dõi vào ô *Ghi chú khám*, tự động bật checkbox *Cảnh báo theo dõi sốt cao / Tăng huyết áp* khi chỉ số vượt ngưỡng.
-   - Tự khóa chặt đúng khu vực đang nhập, không bao giờ ghi đè nhầm sang các ô trùng tên (`name="GhiChu"`) nằm ở tab/khối khác trên cùng màn hình.
+### 2. 🏛️ Nhóm Hành chính công & Cơ quan Nhà nước (UBND, Sở/Ban/Ngành, Một cửa)
+*Áp dụng trên: Cổng Dịch vụ công Quốc gia/Tỉnh, Phần mềm Một cửa điện tử (iGate), Phần mềm Hộ tịch, Quản lý văn bản (iOffice, Egov)...*
+- **Tiếp nhận hồ sơ Một cửa & Tư pháp - Hộ tịch**: Chọn *Thủ tục hành chính* (Khai sinh, Kết hôn, Chứng thực, Đất đai...) ➔ Tự động điền *Số ngày giải quyết*, *Mức lệ phí quy định*, *Phòng chuyên môn thụ lý* và *Ghi chú thành phần hồ sơ*.
+- **Điền sẵn địa giới hành chính mặc định tại địa phương**: Ngay khi mở biểu mẫu hoặc Popup nhập công dân ➔ Tự động chọn sẵn *Quốc tịch = Việt Nam*, *Dân tộc phổ biến tại địa bàn*, *Tỉnh/Thành phố*, *Xã/Phường* để cán bộ không phải chọn lại từ đầu cho từng hồ sơ.
+- **Quản lý văn bản & Điều hành (eOffice)**: Chọn *Loại văn bản* (`Công văn`, `Quyết định`, `Tờ trình`, `Báo cáo`) hoặc *Độ khẩn* ➔ Tự điền *Ký hiệu văn bản chuẩn của đơn vị*, *Hạn xử lý*, *Nơi nhận lưu* và chọn sẵn *Lãnh đạo ký duyệt*.
 
-3. **💊 Bảng kê đơn thuốc, Vật tư & Danh sách chi tiết nhiều dòng động (`row:`)**
-   - Trên bảng kê đơn có hàng chục dòng thuốc được chèn động bằng JavaScript (không có ID riêng, cấu trúc các dòng giống hệt nhau):
-   - Đổi *Đường dùng* (`Uống` / `Tiêm` / `Bôi`) hoặc sửa *Sáng - Tối - Số ngày* ở dòng nào ➔ Tự động điền *Cách dùng chuẩn* và tự tính công thức *Tổng số lượng* cho **đúng duy nhất dòng thuốc đang thao tác**.
+### 3. 🎓 Nhóm Giáo dục & Đào tạo (Trường học phổ thông, Đại học, Trung tâm đào tạo)
+*Áp dụng trên: vnEdu, Viettel SMAS, Cơ sở dữ liệu ngành CSDL Bộ GD&ĐT, Cổng quản lý đào tạo tín chỉ / LMS...*
+- **Nhập điểm & Nhận xét học bạ theo từng dòng học sinh (`row:`)**: Trên bảng điểm danh sách lớp nhiều dòng, giáo viên nhập *Điểm đánh giá / Mức đạt* ở dòng học sinh nào ➔ Tự động quy đổi *Xếp loại* và điền *Nhận xét chuẩn theo Thông tư Bộ GD&ĐT* tương ứng ngay tại dòng đó (vẫn giữ nguyên nếu giáo viên đã viết nhận xét riêng).
+- **Tuyển sinh đầu cấp & Hồ sơ học sinh - sinh viên**: Chọn *Thôn/Bản/Tổ dân phố* hoặc *Diện chính sách* ➔ Tự động xác định *Khu vực ưu tiên (`KV1`, `KV2-NT`, `KV2`, `KV3`)*, *Đối tượng miễn giảm học phí* và *Tuyến tuyển sinh*.
+- **Popup xét thi đua, khen thưởng & tốt nghiệp**: Mở hộp thoại xét duyệt ➔ Tự điền sẵn *Năm học - Học kỳ hiện hành*, *Căn cứ quyết định* và *Danh hiệu tương ứng*.
 
-4. **🔍 Tự động chọn các hộp tìm kiếm động Select2 / Combobox tải dữ liệu qua AJAX**
-   - Nhiều ô trên Web (như *Mã bệnh ICD-10, Dịch vụ kỹ thuật, Xã/Phường, Khoa/Phòng*) ban đầu hoàn toàn rỗng, bắt buộc người dùng phải click mở, gõ từ khóa, chờ tải danh sách rồi chọn.
-   - Kịch bản hỗ trợ tự động bấm mở hộp Select2, gõ từ khóa tương ứng, chờ danh sách AJAX trả về và tự chọn đúng mục cần thiết.
+### 4. 💰 Nhóm Kế toán, Tài chính, Kho bạc & Thuế
+*Áp dụng trên: MISA AMIS, Fast Accounting, Bravo, Dịch vụ công Kho bạc Nhà nước (DVC KBNN), Hóa đơn điện tử, Thuế điện tử...*
+- **Định khoản chứng từ & Bảng hạch toán nhiều dòng (`row:`)**: Chọn *Loại nghiệp vụ thu/chi* ở từng dòng hạch toán ➔ Tự động điền cặp *Tài khoản Nợ / Tài khoản Có*, *Mã chương - Tiểu mục ngân sách (MLNS)*, *Nguồn kinh phí* và *Thuế suất GTGT (`0%`, `5%`, `8%`, `10%`)*.
+- **Xuất hóa đơn điện tử & Giao dịch Kho bạc**: Mở Popup lập chứng từ thanh toán hoặc hóa đơn ➔ Tự điền sẵn *Hình thức thanh toán mặc định (`Chuyển khoản`)*, *Đơn vị tính* và *Nội dung diễn giải chuẩn theo quy định Kho bạc*.
 
-5. **🪟 Tự động hóa trên mọi loại Popup / Hộp thoại nghiệp vụ**
-   - Các phiếu con mở ra từ màn hình chính như *Phiếu chuyển tuyến, Chỉ định Cận lâm sàng, Giấy ra viện, Phiếu hội chẩn, Cửa sổ in biểu mẫu...* thường nằm trong **Modal HTML nổi**, **khung nhúng `<iframe>`**, hoặc **cửa sổ tách rời `window.open`**.
-   - Hỗ trợ cả 2 kiểu chạy thực tế:
-     - **🚀 Điền sẵn ngay khoảnh khắc Popup vừa mở lên (`on_open`)**: Vừa bấm mở *Phiếu chuyển tuyến* ➔ Tự chờ API khởi tạo của Popup tải xong rồi điền sẵn *Tuyến chuyển*, *Phương tiện vận chuyển*, *Ghi chú mặc định* mà không cần gõ tay.
-     - **⚡ Chạy khi thao tác bên trong Popup**: Chọn *Nhóm xét nghiệm / Kết quả điều trị* trong Popup ➔ Tự động điền *Phòng thực hiện, Chỉ dẫn chuẩn bị bệnh nhân, Số ngày nghỉ BHXH, Lời dặn bác sĩ*.
+### 5. 🛒 Nhóm Bán hàng, Thương mại điện tử, Kho vận & Logistics
+*Áp dụng trên: Sapo, KiotViet, Haravan, Odoo/ERP, Cổng lên đơn ViettelPost / GHTK / GHN / J&T, Cổng Hải quan...*
+- **Tạo vận đơn & Xử lý đơn hàng nhanh**: Chọn *Nhóm sản phẩm* (`Hàng dễ vỡ`, `Thực phẩm lạnh`, `Điện tử giá trị cao`, `Thời trang`) ➔ Tự chọn *Dịch vụ vận chuyển*, *Tùy chọn xem hàng* (`"Cho xem hàng, không cho thử"`), bật checkbox *Khai giá / Bảo hiểm* và điền sẵn *Khối lượng - Kích thước đóng gói tiêu chuẩn*.
+- **Phiếu nhập / xuất / kiểm kê kho nhiều dòng (`row:`)**: Chọn *Lý do xuất / Kho nhận* hoặc nhập *Số thùng* ở dòng hàng hóa nào ➔ Tự quy đổi ra *Tổng số lượng đơn vị lẻ* và điền *Vị trí kệ kho*.
 
-6. **🏢 Mở rộng cho mọi Web nội bộ khác (Cổng dữ liệu ngành, Hành chính công, ERP, CRM)**
-   - Tự động điền thông tin đơn vị/địa giới hành chính mặc định tại địa phương, chuẩn hóa dữ liệu đầu vào theo quy định riêng của đơn vị, hoặc đồng bộ liên hoàn nhiều trường dữ liệu mà không cần chờ nhà cung cấp nâng cấp phần mềm.
+### 6. 👥 Nhóm Nhân sự, Tiền lương & Bảo hiểm xã hội (HRM)
+*Áp dụng trên: Phần mềm HRM (Base, 1Office, MISAHRM...), Cổng kê khai BHXH điện tử (EFY, iVAN, VssID Web)...*
+- **Tiếp nhận nhân sự mới & Hợp đồng lao động**: Chọn *Chức danh / Ngạch bậc* ➔ Tự động điền *Phòng ban*, *Thời gian thử việc*, *Mức phụ cấp ăn ca/điện thoại*, *Vùng lương tối thiểu* và *Bệnh viện đăng ký KCB BHYT ban đầu thường dùng*.
+- **Kê khai tăng/giảm lao động & Giải quyết chế độ BHXH**: Chọn *Phương án kê khai* (Tăng mới, Nghỉ thai sản, Nghỉ ốm, Thôi việc) ➔ Tự điền *Tỷ lệ đóng*, *Căn cứ hồ sơ kèm theo* và *Ghi chú nghiệp vụ*.
+
+### 7. 🏦 Nhóm Ngân hàng, Bảo hiểm, Tín dụng & Chăm sóc khách hàng (CRM / Call Center)
+*Áp dụng trên: Core Banking/LOS nền Web, Phần mềm đại lý Bảo hiểm, Salesforce, Zoho CRM, Zendesk, Tổng đài CSKH...*
+- **Tổng đài CSKH & Xử lý phiếu phản ánh (Ticket)**: Điện thoại viên chọn *Nhóm vấn đề khách hàng gặp phải* ➔ Tự động gán *Mức độ ưu tiên (SLA)*, *Phòng ban xử lý tuyến 2* và điền sẵn *Mẫu khung ghi chú cuộc gọi (Template)* vào ô nội dung để điền nhanh thông tin chính.
+- **Thẩm định hồ sơ tín dụng / Hợp đồng bảo hiểm**: Nhập *Độ tuổi, Nghề nghiệp, Thu nhập* ➔ Tự động phân loại *Nhóm khách hàng*, *Gói sản phẩm/hạn mức đề xuất* và các mục kiểm tra hồ sơ bắt buộc.
 
 ---
 
@@ -54,7 +68,7 @@ Giải quyết triệt để bài toán các trang Web hiện đại (Angular, R
 
 ### 2. Tự động nhận diện & Thực thi trên đủ 3 loại Popup (Giữ nguyên URL trang gốc)
 - Chỉ cần bấm **`🎯 Chọn`** (hoặc **`🎯 Nhận diện Popup`**) rồi click vào phần tử bên trong Popup, tiện ích tự động phát hiện và cấu hình đúng loại:
-  1. **`💬 Modal HTML` (`dom_modal`)**: Hộp thoại nổi trên cùng trang (`[role="dialog"]`, `<dialog>`, Bootstrap, AntD, Element UI, jQuery UI, DevExpress, Kendo, hoặc `div` có `position: fixed/absolute` + `z-index` cao) — tự khóa chặt phạm vi thực thi bên trong Modal.
+  1. **`💬 Modal HTML` (`dom_modal`)**: Hộp thoại nổi trên cùng trang (`[role="dialog"]`, `<dialog>`, Bootstrap, AntD, Element UI, jQuery UI, DevExpress, Kendo, hoặc `div` có `position: fixed/absolute` + `z-index` cao) — tự khóa chặt phạm vi thực thi bên trong Modal, kèm chế độ **`🚀 Ngay khi Popup vừa mở lên` (`on_open`)**.
   2. **`🖼️ Khung nhúng <iframe>` (`iframe_popup`)**: Hỗ trợ cả `<iframe>` khác đường dẫn con hoặc `about:blank` / `srcdoc`, tự kế thừa URL trang mẹ.
   3. **`🪟 Cửa sổ tách rời` (`window_popup`)**: Cửa sổ con mở bằng `window.open` (`window.type === 'popup'`), cho phép rê chuột chọn phần tử xuyên từ bảng điều khiển cửa sổ chính sang cửa sổ con.
 
@@ -67,7 +81,7 @@ Trong một Kịch bản, mỗi dòng Rule trong bảng có thể chọn riêng 
 
 ### 4. Quản lý Kịch bản an toàn & Phòng Kiểm Thử Offline tích hợp sẵn
 - **Xuất / Nhập file `.json` sạch gọn**: Tự động loại bỏ trường thừa theo đúng phương thức của từng Rule; chống lưu trùng và chống Import trùng cấu hình 100% (so khớp dấu vân tay cấu hình không phân biệt tên), kèm hộp thoại hỏi xử lý khi trùng tên kịch bản (*Ghi đè bản cũ* hoặc *Giữ cả hai & tự đánh số*).
-- **Phòng Kiểm Thử Tích Hợp Sẵn 100% Offline (`🧪 Demo`)**: Bấm nút **`🧪 Demo`** ngay trên thanh tiêu đề tiện ích để mở trang giả lập HIS kèm **7 kịch bản mẫu** (bao phủ đủ 4 phương thức Rule, chờ API ngầm, Select2 tĩnh & AJAX, 7 trường hợp chọn Element động và đủ 3 loại Popup) mà không cần cài đặt thêm bất kỳ server nào.
+- **Phòng Kiểm Thử Tích Hợp Sẵn 100% Offline (`🧪 Demo`)**: Bấm nút **`🧪 Demo`** ngay trên thanh tiêu đề tiện ích để mở trang kiểm thử tích hợp sẵn kèm **7 kịch bản mẫu** (bao phủ đủ 4 phương thức Rule, chờ API ngầm, Select2 tĩnh & AJAX, 7 trường hợp chọn Element động và đủ 3 loại Popup) mà không cần cài đặt thêm bất kỳ server nào.
 
 ---
 
@@ -98,5 +112,5 @@ BATO_SMART_FILL/
 ├── plugins/
 │   └── custom-plugins.js         # Thư viện Plugin JS mở rộng cho IT (tích hợp sẵn select2_auto_select)
 ├── offscreen/ & sandbox/         # Môi trường cô lập thực thi Script tùy chỉnh an toàn theo chuẩn MV3
-└── demo/                         # Phòng kiểm thử HIS 100% Offline (Trang chính + Modal + Iframe + Window.open + 7 kịch bản mẫu)
+└── demo/                         # Phòng kiểm thử tích hợp sẵn 100% Offline (Trang chính + 3 loại Popup + 7 kịch bản mẫu)
 ```
