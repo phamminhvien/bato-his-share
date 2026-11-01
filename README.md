@@ -1,5 +1,8 @@
 # HIS Toolkit
 
+> [!NOTE]
+> Tiện ích mở rộng & công cụ tự động hóa được đồng bộ tự động từ Bato HIS.
+
 Thư mục chứa các công cụ độc lập, mini tools, tiện ích tự động hóa và tiện ích mở rộng (browser extensions) phục vụ cho hệ thống HIS mà không phụ thuộc trực tiếp vào mã nguồn cốt lõi (core codebase).
 
 ---
