@@ -255,6 +255,30 @@
     </div>
   </div>
 
+  <!-- ===================================================================== -->
+  <!-- MODAL HỎI XÁC NHẬN KHI NHẬP JSON CÓ KỊCH BẢN TRÙNG TÊN                -->
+  <!-- ===================================================================== -->
+  <div id="importConflictOverlay" class="modal-overlay hidden">
+    <div class="modal-dialog" style="max-width: 460px;">
+      <div class="modal-header">
+        <div id="importConflictTitle" class="modal-title">⚠️ Phát hiện kịch bản trùng tên</div>
+        <button type="button" id="btnCloseConflictModal" class="modal-close" title="Đóng">✕</button>
+      </div>
+
+      <div id="importConflictBody" class="modal-body"></div>
+
+      <div class="modal-footer" style="flex-wrap: wrap; justify-content: flex-end; gap: 6px;">
+        <button type="button" id="btnConflictCancel" class="btn btn-ghost btn-sm">Hủy</button>
+        <button type="button" id="btnConflictKeepBoth" class="btn btn-outline btn-sm">
+          📑 Giữ cả hai &amp; đánh số (2), (3)
+        </button>
+        <button type="button" id="btnConflictOverwrite" class="btn btn-primary btn-sm">
+          🔄 Ghi đè bản cũ
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Nạp danh sách Plugin JS chung trước khi chạy Controller -->
   <script src="../plugins/custom-plugins.js"></script>
   <script src="popup.js"></script>

@@ -164,9 +164,6 @@
   }
 
   function createEmptyRuleItem() {
-    const plugins = getAvailablePluginsList();
-    const firstPlugin = plugins.length > 0 ? plugins[0] : null;
-
     return {
       id: uid('rule'),
       enabled: true,
@@ -176,14 +173,205 @@
       mode: 'fixed', // 'fixed' | 'mapping' | 'script' | 'plugin'
       onlyIfEmpty: false,
       keepValues: '',
-      fixedValue: '',
-      mappings: [createEmptyMappingRow()],
-      mappingFallbackMode: 'keep', // 'keep' | 'fixed'
-      mappingFallbackValue: '',
-      scriptCode: SCRIPT_TEMPLATES.basic_if,
-      pluginName: firstPlugin ? firstPlugin.id : '',
-      pluginParams: firstPlugin ? firstPlugin.defaultParams || '' : ''
+      fixedValue: ''
     };
+  }
+
+  /**
+   * Lọc sạch dữ liệu Rule: chỉ giữ lại các thuộc tính của đúng 1 phương thức đang chọn (mode),
+   * loại bỏ hoàn toàn các trường rác/nháp của các phương thức không sử dụng.
+   */
+  function sanitizeRuleItem(rawRule) {
+    const r = rawRule && typeof rawRule === 'object' ? rawRule : {};
+    const mode = ['fixed', 'mapping', 'script', 'plugin'].includes(r.mode) ? r.mode : 'fixed';
+    const clean = {
+      id: r.id || uid('rule'),
+      enabled: r.enabled !== false,
+      selector: String(r.selector ?? '').trim(),
+      actionType: r.actionType || 'auto',
+      delayMs: Math.max(0, parseInt(r.delayMs, 10) || 0),
+      mode
+    };
+
+    if (mode === 'fixed') {
+      clean.fixedValue = String(r.fixedValue ?? '');
+      clean.keepValues = String(r.keepValues ?? '').trim();
+      clean.onlyIfEmpty = Boolean(r.onlyIfEmpty);
+    } else if (mode === 'mapping') {
+      const rawMappings =
+        Array.isArray(r.mappings) && r.mappings.length > 0
+          ? r.mappings
+          : [createEmptyMappingRow()];
+      clean.mappings = rawMappings.map((m) => {
+        const act = m && m.resultAction === 'keep' ? 'keep' : 'fill';
+        const op = (m && m.operator) || 'eq';
+        const noMatchVal = op === 'empty' || op === 'not_empty';
+        return {
+          sourceSelector: String((m && m.sourceSelector) ?? '').trim(),
+          operator: op,
+          matchValue: noMatchVal ? '' : String((m && m.matchValue) ?? ''),
+          resultAction: act,
+          outputValue: act === 'keep' ? '' : String((m && m.outputValue) ?? '')
+        };
+      });
+      clean.mappingFallbackMode = r.mappingFallbackMode === 'fixed' ? 'fixed' : 'keep';
+      clean.mappingFallbackValue =
+        clean.mappingFallbackMode === 'fixed' ? String(r.mappingFallbackValue ?? '') : '';
+    } else if (mode === 'script') {
+      clean.scriptCode = String(r.scriptCode ?? '');
+    } else if (mode === 'plugin') {
+      clean.pluginName = String(r.pluginName ?? '').trim();
+      clean.pluginParams = String(r.pluginParams ?? '');
+    }
+
+    return clean;
+  }
+
+  function sanitizeScenario(rawScn) {
+    const s = rawScn && typeof rawScn === 'object' ? rawScn : {};
+    const targets = Array.isArray(s.targets) ? s.targets.map(sanitizeRuleItem) : [];
+    return {
+      id: s.id || uid('scn'),
+      name: String(s.name ?? '').trim(),
+      enabled: s.enabled !== false,
+      urlPattern: String(s.urlPattern ?? '').trim(),
+      triggerSelector: String(s.triggerSelector ?? '').trim(),
+      triggerEvent: s.triggerEvent || 'auto',
+      triggerWaitMs: Math.max(0, parseInt(s.triggerWaitMs, 10) || 0),
+      waitForSettled: s.waitForSettled !== false,
+      maxSettleMs: Math.max(200, parseInt(s.maxSettleMs, 10) || 3000),
+      targets
+    };
+  }
+
+  /**
+   * Tạo dấu vân tay cấu hình chuẩn (Fingerprint) cho Kịch bản để kiểm tra trùng lặp:
+   * So sánh toàn bộ URL, Trigger, Sự kiện, Danh sách Rule, Element đích & chi tiết cấu hình,
+   * KHÔNG phân biệt tên Kịch bản (name) và mã định danh (id).
+   */
+  function buildScenarioFingerprint(rawScn) {
+    const s = sanitizeScenario(rawScn);
+    const canonicalTargets = s.targets.map((t) => {
+      const base = {
+        selector: t.selector,
+        actionType: t.actionType,
+        delayMs: t.delayMs,
+        mode: t.mode
+      };
+      if (t.mode === 'fixed') {
+        base.fixedValue = t.fixedValue.trim();
+        base.keepValues = t.keepValues;
+        base.onlyIfEmpty = t.onlyIfEmpty;
+      } else if (t.mode === 'mapping') {
+        base.mappings = t.mappings.map((m) => ({
+          sourceSelector: m.sourceSelector,
+          operator: m.operator,
+          matchValue: m.matchValue.trim(),
+          resultAction: m.resultAction,
+          outputValue: m.outputValue.trim()
+        }));
+        base.mappingFallbackMode = t.mappingFallbackMode;
+        base.mappingFallbackValue = t.mappingFallbackValue.trim();
+      } else if (t.mode === 'script') {
+        base.scriptCode = t.scriptCode.replace(/\r\n/g, '\n').trim();
+      } else if (t.mode === 'plugin') {
+        base.pluginName = t.pluginName;
+        base.pluginParams = t.pluginParams.replace(/\r\n/g, '\n').trim();
+      }
+      return base;
+    });
+
+    return JSON.stringify({
+      urlPattern: s.urlPattern.toLowerCase(),
+      triggerSelector: s.triggerSelector,
+      triggerEvent: s.triggerEvent,
+      triggerWaitMs: s.triggerWaitMs,
+      waitForSettled: s.waitForSettled,
+      maxSettleMs: s.waitForSettled ? s.maxSettleMs : 0,
+      targets: canonicalTargets
+    });
+  }
+
+  function normalizeScenarioName(name) {
+    return String(name ?? '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toLowerCase();
+  }
+
+  function generateUniqueScenarioName(baseName, usedNormNamesSet) {
+    const trimmed = String(baseName || 'Kịch bản mới').trim();
+    if (!usedNormNamesSet.has(normalizeScenarioName(trimmed))) {
+      return trimmed;
+    }
+    const rootName = trimmed.replace(/\s*\(\d+\)$/, '').trim() || 'Kịch bản mới';
+    let counter = 2;
+    while (usedNormNamesSet.has(normalizeScenarioName(`${rootName} (${counter})`))) {
+      counter++;
+    }
+    return `${rootName} (${counter})`;
+  }
+
+  /**
+   * Hiển thị hộp thoại hỏi người dùng cách xử lý khi Nhập file JSON gặp kịch bản trùng tên (nhưng khác cấu hình Rule)
+   * Trả về Promise<'overwrite' | 'keep_both' | 'cancel'>
+   */
+  function askImportNameConflictChoice(conflictNames) {
+    return new Promise((resolve) => {
+      const overlay = document.getElementById('importConflictOverlay');
+      const titleEl = document.getElementById('importConflictTitle');
+      const bodyEl = document.getElementById('importConflictBody');
+      const btnClose = document.getElementById('btnCloseConflictModal');
+      const btnCancel = document.getElementById('btnConflictCancel');
+      const btnKeep = document.getElementById('btnConflictKeepBoth');
+      const btnOverwrite = document.getElementById('btnConflictOverwrite');
+
+      titleEl.textContent = `⚠️ Phát hiện ${conflictNames.length} kịch bản trùng tên`;
+      const namesListHtml = conflictNames
+        .slice(0, 8)
+        .map((n) => `<li style="margin: 3px 0; font-weight: 600; color: #0f172a;">${escapeHtml(n)}</li>`)
+        .join('');
+      const moreHtml =
+        conflictNames.length > 8
+          ? `<li style="color:#64748b;">...và ${conflictNames.length - 8} kịch bản khác</li>`
+          : '';
+
+      bodyEl.innerHTML = `
+        <div style="font-size: 12.5px; line-height: 1.5; color: #334155;">
+          Các kịch bản dưới đây có <b>cùng tên</b> với kịch bản đang có trong máy nhưng <b>khác cấu hình Rule bên trong</b>:
+          <ul style="margin: 8px 0 10px 18px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 7px 10px 7px 24px;">
+            ${namesListHtml}
+            ${moreHtml}
+          </ul>
+          Bạn muốn xử lý như thế nào?
+        </div>
+      `;
+
+      overlay.classList.remove('hidden');
+
+      const finish = (choice) => {
+        overlay.classList.add('hidden');
+        btnClose.removeEventListener('click', onCancel);
+        btnCancel.removeEventListener('click', onCancel);
+        btnKeep.removeEventListener('click', onKeep);
+        btnOverwrite.removeEventListener('click', onOverwrite);
+        document.removeEventListener('keydown', onEsc);
+        resolve(choice);
+      };
+
+      const onCancel = () => finish('cancel');
+      const onKeep = () => finish('keep_both');
+      const onOverwrite = () => finish('overwrite');
+      const onEsc = (ev) => {
+        if (ev.key === 'Escape') finish('cancel');
+      };
+
+      btnClose.addEventListener('click', onCancel);
+      btnCancel.addEventListener('click', onCancel);
+      btnKeep.addEventListener('click', onKeep);
+      btnOverwrite.addEventListener('click', onOverwrite);
+      document.addEventListener('keydown', onEsc);
+    });
   }
 
   function createEmptyScenario(defaultUrl = '') {
@@ -245,7 +433,13 @@
     const store = await chrome.storage.local.get(['enabled', 'showToast', 'rules', 'editorDraft']);
     state.enabled = store.enabled !== false;
     state.showToast = store.showToast !== false;
-    state.scenarios = Array.isArray(store.rules) ? store.rules : [];
+    const rawStoredRules = Array.isArray(store.rules) ? store.rules : [];
+    state.scenarios = rawStoredRules.map(sanitizeScenario);
+
+    // Làm sạch luôn dữ liệu cũ còn sót trường thừa trong storage (nếu có)
+    if (JSON.stringify(rawStoredRules) !== JSON.stringify(state.scenarios)) {
+      await chrome.storage.local.set({ rules: state.scenarios });
+    }
 
     bindStaticEvents();
     bindRealtimeListeners();
@@ -453,9 +647,10 @@
       btn.addEventListener('click', async () => {
         const found = state.scenarios.find((s) => s.id === btn.dataset.id);
         if (found) {
-          const copy = JSON.parse(JSON.stringify(found));
+          const copy = sanitizeScenario(found);
           copy.id = uid('scn');
-          copy.name = `${copy.name || 'Kịch bản'} (Bản sao)`;
+          const usedNormNames = new Set(state.scenarios.map((s) => normalizeScenarioName(s.name)));
+          copy.name = generateUniqueScenarioName(`${copy.name || 'Kịch bản'} (Bản sao)`, usedNormNames);
           state.scenarios.unshift(copy);
           await chrome.storage.local.set({ rules: state.scenarios });
           renderHeader();
@@ -1096,6 +1291,12 @@
       r.mode = e.target.value;
       if (r.mode === 'plugin' && !r.pluginName && availablePlugins.length > 0) {
         r.pluginName = availablePlugins[0].id;
+        if (r.pluginParams === undefined && availablePlugins[0].defaultParams !== undefined) {
+          r.pluginParams =
+            typeof availablePlugins[0].defaultParams === 'string'
+              ? availablePlugins[0].defaultParams
+              : JSON.stringify(availablePlugins[0].defaultParams, null, 2);
+        }
       }
       renderRuleModalBody();
       saveDraftToStorage();
@@ -1332,12 +1533,18 @@
       return;
     }
 
+    if (mode === 'script' && (!ruleData.scriptCode || !ruleData.scriptCode.trim())) {
+      alert('Vui lòng nhập nội dung Script cho Rule này (hoặc chọn 1 khung mẫu gợi ý)!');
+      document.getElementById('modalTxtScript')?.focus();
+      return;
+    }
+
     if (mode === 'plugin' && (!ruleData.pluginName || !ruleData.pluginName.trim())) {
       alert('Vui lòng chọn hoặc nhập mã Plugin JS!');
       return;
     }
 
-    const cleanItem = JSON.parse(JSON.stringify(ruleData));
+    const cleanItem = sanitizeRuleItem(ruleData);
     if (isNewRow || rowIndex === null || rowIndex === undefined) {
       state.editingScenario.targets.push(cleanItem);
     } else {
@@ -1374,13 +1581,45 @@
       return;
     }
 
+    const otherNormNames = new Set(
+      state.scenarios
+        .filter((s) => s.id !== scn.id)
+        .map((s) => normalizeScenarioName(s.name))
+        .filter(Boolean)
+    );
+
     if (!scn.name || !scn.name.trim()) {
-      scn.name = `Kịch bản từ ${scn.triggerSelector} (${scn.targets.length} Rule)`;
+      scn.name = generateUniqueScenarioName(
+        `Kịch bản từ ${scn.triggerSelector} (${scn.targets.length} Rule)`,
+        otherNormNames
+      );
     }
 
-    const cleanScn = JSON.parse(JSON.stringify(scn));
-    delete cleanScn.isNew;
-    delete cleanScn.activeRuleModal;
+    const cleanScn = sanitizeScenario(scn);
+
+    // 1. Cảnh báo trùng tên với Kịch bản khác khi Tạo / Sửa trực tiếp trên giao diện
+    if (otherNormNames.has(normalizeScenarioName(cleanScn.name))) {
+      alert(
+        `Tên kịch bản "${cleanScn.name}" đã tồn tại! Vui lòng đặt tên khác trước khi lưu.`
+      );
+      document.getElementById('inpScenarioName')?.focus();
+      return;
+    }
+
+    const newFingerprint = buildScenarioFingerprint(cleanScn);
+
+    // 2. Kiểm tra trùng lặp toàn bộ cấu hình với các Kịch bản khác đang có sẵn (không phân biệt tên)
+    const duplicateOther = state.scenarios.find(
+      (s) => s.id !== cleanScn.id && buildScenarioFingerprint(s) === newFingerprint
+    );
+    if (duplicateOther) {
+      alert(
+        `Không thể lưu vì cấu hình này đã trùng hoàn toàn (URL, Trigger và toàn bộ Rule) với kịch bản "${
+          duplicateOther.name || duplicateOther.id
+        }"!`
+      );
+      return;
+    }
 
     const existingIdx = state.scenarios.findIndex((s) => s.id === cleanScn.id);
     if (existingIdx >= 0) {
@@ -1582,13 +1821,14 @@
       }
     });
 
-    // Export JSON
+    // Export JSON (đã lọc gọn sạch theo đúng phương thức từng Rule)
     document.getElementById('btnExportJson').addEventListener('click', () => {
+      const cleanScenarios = state.scenarios.map(sanitizeScenario);
       const payload = {
         app: 'BATO_SMART_FILL',
         version: '1.3.0',
         exportedAt: new Date().toISOString(),
-        scenarios: state.scenarios
+        scenarios: cleanScenarios
       };
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -1599,7 +1839,7 @@
       URL.revokeObjectURL(url);
     });
 
-    // Import JSON
+    // Import JSON (kèm lọc sạch trường thừa & chống trùng lặp toàn bộ cấu hình không phân biệt tên)
     const fileInput = document.getElementById('fileImportInput');
     document.getElementById('btnImportJson').addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', (e) => {
@@ -1615,10 +1855,108 @@
           if (!Array.isArray(imported)) {
             throw new Error('File JSON không đúng định dạng danh sách Kịch bản.');
           }
-          state.scenarios = [...imported, ...state.scenarios];
+
+          const existingFingerprints = new Set(state.scenarios.map(buildScenarioFingerprint));
+          const candidates = [];
+          let skippedDuplicates = 0;
+
+          // Bước 1: Lọc bỏ các kịch bản trùng hệt 100% cấu hình (không phân biệt tên)
+          for (const rawItem of imported) {
+            if (!rawItem || typeof rawItem !== 'object') continue;
+            const cleaned = sanitizeScenario(rawItem);
+            if (!cleaned.name) {
+              cleaned.name = `Kịch bản từ ${cleaned.triggerSelector || 'Import'} (${cleaned.targets.length} Rule)`;
+            }
+            const fp = buildScenarioFingerprint(cleaned);
+
+            if (existingFingerprints.has(fp)) {
+              skippedDuplicates++;
+              continue;
+            }
+
+            existingFingerprints.add(fp);
+            candidates.push(cleaned);
+          }
+
+          if (candidates.length === 0) {
+            if (skippedDuplicates > 0) {
+              alert(
+                `Bỏ qua ${skippedDuplicates} kịch bản do đã tồn tại kịch bản trùng hoàn toàn cấu hình (URL, Trigger, Rule & Element đích)!`
+              );
+            }
+            return;
+          }
+
+          // Bước 2: Kiểm tra các kịch bản KHÁC cấu hình nhưng bị TRÙNG TÊN với kịch bản đang có trong máy
+          const existingNormNameMap = new Map();
+          state.scenarios.forEach((s, idx) => {
+            const norm = normalizeScenarioName(s.name);
+            if (norm && !existingNormNameMap.has(norm)) {
+              existingNormNameMap.set(norm, idx);
+            }
+          });
+
+          const conflictItems = candidates.filter((c) =>
+            existingNormNameMap.has(normalizeScenarioName(c.name))
+          );
+
+          let conflictResolution = 'keep_both';
+          if (conflictItems.length > 0) {
+            const uniqueConflictNames = Array.from(new Set(conflictItems.map((c) => c.name)));
+            conflictResolution = await askImportNameConflictChoice(uniqueConflictNames);
+            if (conflictResolution === 'cancel') {
+              return;
+            }
+          }
+
+          // Bước 3: Áp dụng theo lựa chọn ("overwrite" = Ghi đè bản cũ | "keep_both" = Giữ cả hai & đánh số (2), (3))
+          const nextScenarios = state.scenarios.slice();
+          const existingIds = new Set(nextScenarios.map((s) => s.id));
+          const usedNormNames = new Set(nextScenarios.map((s) => normalizeScenarioName(s.name)));
+          const prependedNew = [];
+          let overwrittenCount = 0;
+          let renamedCount = 0;
+
+          for (const item of candidates) {
+            const norm = normalizeScenarioName(item.name);
+
+            if (conflictResolution === 'overwrite' && existingNormNameMap.has(norm)) {
+              const targetIdx = existingNormNameMap.get(norm);
+              const oldScn = nextScenarios[targetIdx];
+              item.id = oldScn.id;
+              item.name = oldScn.name; // Giữ chuẩn tên gốc đang có
+              nextScenarios[targetIdx] = item;
+              overwrittenCount++;
+              // Xóa khỏi map để nếu ngay trong file JSON có 2 bản cùng tên thì bản thứ 2 tự đánh số (2)
+              existingNormNameMap.delete(norm);
+              continue;
+            }
+
+            if (existingIds.has(item.id)) {
+              item.id = uid('scn');
+            }
+            existingIds.add(item.id);
+
+            const uniqueName = generateUniqueScenarioName(item.name, usedNormNames);
+            if (uniqueName !== item.name) {
+              renamedCount++;
+              item.name = uniqueName;
+            }
+            usedNormNames.add(normalizeScenarioName(item.name));
+            prependedNew.push(item);
+          }
+
+          state.scenarios = [...prependedNew, ...nextScenarios];
           await chrome.storage.local.set({ rules: state.scenarios });
           renderHeader();
-          alert(`Đã nhập thành công ${imported.length} kịch bản!`);
+
+          const summaryParts = [];
+          if (overwrittenCount > 0) summaryParts.push(`ghi đè cập nhật ${overwrittenCount} kịch bản trùng tên`);
+          if (prependedNew.length > 0) summaryParts.push(`thêm mới ${prependedNew.length} kịch bản`);
+          if (renamedCount > 0) summaryParts.push(`tự đánh số phân biệt ${renamedCount} kịch bản trùng tên`);
+          if (skippedDuplicates > 0) summaryParts.push(`bỏ qua ${skippedDuplicates} kịch bản trùng hệt cấu hình`);
+
+          alert(`Hoàn tất nhập JSON: Đã ${summaryParts.join(', ')}!`);
           showScenariosListView();
         } catch (err) {
           alert(`Lỗi đọc file JSON: ${err.message}`);
