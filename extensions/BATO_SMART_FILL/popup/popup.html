@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BATO_SMART_FILL</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+
+<body>
+  <!-- Sandbox ẩn phục vụ tính năng "Chạy thử Script" trực tiếp -->
+  <iframe id="popupSandboxFrame" src="../sandbox/sandbox.html" style="display:none;"></iframe>
+
+  <div class="app-shell">
+    <!-- HEADER -->
+    <header class="topbar">
+      <div class="brand">
+        <img src="../icons/icon128.png" alt="VP Logo" class="brand-icon" />
+        <div class="brand-info">
+          <div class="brand-title">BATO_SMART_FILL</div>
+          <div id="pageMatchInfo" class="brand-subtitle">Đang kiểm tra trang hiện tại...</div>
+        </div>
+      </div>
+
+      <label class="switch-wrap" title="Bật / Tắt toàn bộ tiện ích">
+        <span id="globalStatusLabel" class="switch-text active">ĐANG BẬT</span>
+        <input type="checkbox" id="chkGlobalEnabled" checked />
+        <span class="slider"></span>
+      </label>
+    </header>
+
+    <!-- THÔNG BÁO PICKER VỪA CHỌN -->
+    <div id="pickerNoticeBar" class="picker-notice hidden">
+      <span id="pickerNoticeText">✅ Đã lấy selector từ trang web!</span>
+      <button type="button" id="btnDismissPickerNotice" class="btn-link">Đóng</button>
+    </div>
+
+    <!-- =================================================================== -->
+    <!-- VIEW 1: DANH SÁCH KỊCH BẢN                                          -->
+    <!-- =================================================================== -->
+    <main id="viewScenariosList" class="view-panel">
+      <div class="scenarios-header">
+        <div class="scenarios-title-wrap">
+          <span class="scenarios-heading">📋 Danh sách Kịch bản</span>
+          <span id="scenariosCountBadge" class="count-pill">0</span>
+        </div>
+
+        <div class="utility-bar">
+          <label class="toast-toggle" title="Bật/tắt thông báo nhỏ góc màn hình khi tự động điền">
+            <input type="checkbox" id="chkShowToast" checked />
+            <span>🔔 Toast</span>
+          </label>
+          <button type="button" id="btnExportJson" class="btn btn-outline btn-xs"
+            title="Xuất danh sách Kịch bản ra file JSON">
+            📤 Xuất
+          </button>
+          <button type="button" id="btnImportJson" class="btn btn-outline btn-xs"
+            title="Nhập danh sách Kịch bản từ file JSON">
+            📥 Nhập
+          </button>
+          <input type="file" id="fileImportInput" accept=".json,application/json" class="hidden" />
+        </div>
+      </div>
+
+      <div class="toolbar-row">
+        <div class="filter-group">
+          <button type="button" class="filter-chip active" data-filter="all">Tất cả</button>
+          <button type="button" class="filter-chip" data-filter="current">Khớp trang này</button>
+        </div>
+        <button type="button" id="btnNewScenario" class="btn btn-primary btn-sm">
+          ＋ Tạo Kịch bản
+        </button>
+      </div>
+
+      <div id="scenariosContainer" class="scenarios-list"></div>
+    </main>
+
+    <!-- =================================================================== -->
+    <!-- VIEW 2: TRÌNH CHỈNH SỬA KỊCH BẢN (SCENARIO EDITOR)                  -->
+    <!-- =================================================================== -->
+    <main id="viewScenarioEditor" class="view-panel hidden">
+      <div class="editor-header">
+        <button type="button" id="btnCancelEdit" class="btn btn-ghost btn-sm">
+          ← Quay lại
+        </button>
+        <div id="editorHeadingTitle" class="editor-heading">Tạo Kịch bản mới</div>
+        <button type="button" id="btnSaveScenarioTop" class="btn btn-primary btn-sm">
+          💾 Lưu Kịch bản
+        </button>
+      </div>
+
+      <div class="editor-scroll">
+        <!-- KHỐI 1: THÔNG TIN KỊCH BẢN & URL -->
+        <section class="card-section">
+          <div class="section-title">1. Thông tin Kịch bản &amp; URL Web thực thi</div>
+
+          <div class="form-row">
+            <div class="form-col flex-1">
+              <label class="field-label">Tên kịch bản</label>
+              <input type="text" id="inpScenarioName" class="inp" placeholder="Nhập tên mô tả kịch bản..." />
+            </div>
+            <div class="form-col" style="width: 100px;">
+              <label class="field-label">Trạng thái</label>
+              <select id="selScenarioEnabled" class="inp">
+                <option value="true">🟢 Bật</option>
+                <option value="false">⚪ Tắt</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group mt-8">
+            <div class="label-with-actions">
+              <label class="field-label">URL Web cần thực thi <span class="req">*</span></label>
+              <div class="quick-links">
+                <button type="button" id="btnUseCurrentOrigin" class="chip-action"
+                  title="Lấy tên miền của tab hiện tại">
+                  📌 Domain hiện tại
+                </button>
+                <button type="button" id="btnUseCurrentPath" class="chip-action"
+                  title="Lấy đường dẫn chi tiết của tab hiện tại">
+                  📌 Đường dẫn hiện tại
+                </button>
+              </div>
+            </div>
+            <input type="text" id="inpUrlPattern" class="inp mono"
+              placeholder="VD: localhost:3000, *://domain.vn/path*, hoặc * (mọi trang)" />
+            <div class="field-hint">
+              Hỗ trợ gõ một phần địa chỉ, ký tự đại diện <code>*</code>, hoặc biểu thức chính quy <code>/regex/</code>.
+            </div>
+          </div>
+        </section>
+
+        <!-- KHỐI 2: ELEMENT CHÍNH BẮT SỰ KIỆN (TRIGGER) -->
+        <section class="card-section">
+          <div class="section-title">2. Element chính để bắt sự kiện (Trigger)</div>
+
+          <div class="form-group">
+            <label class="field-label">Selector phần tử nguồn <span class="req">*</span></label>
+            <div class="input-action-group">
+              <input type="text" id="inpTriggerSelector" class="inp mono"
+                placeholder="VD: #id_element, .class_name, [name='field_name']" />
+              <button type="button" id="btnPickTrigger" class="btn btn-accent btn-sm"
+                title="Click trực tiếp lên phần tử trên trang web bên trái để lấy Selector">
+                🎯 Chọn
+              </button>
+              <button type="button" id="btnHighlightTrigger" class="btn btn-outline btn-sm"
+                title="Nháy sáng kiểm tra phần tử trên trang hiện tại">
+                🔍
+              </button>
+            </div>
+          </div>
+
+          <div class="form-row mt-8">
+            <div class="form-col flex-1">
+              <label class="field-label">Sự kiện kích hoạt</label>
+              <select id="selTriggerEvent" class="inp">
+                <option value="auto">✨ Tự động thông minh (onchange + blur + input)</option>
+                <option value="change">change — Khi chọn xong / đổi giá trị</option>
+                <option value="blur">blur — Khi rời con trỏ khỏi ô</option>
+                <option value="input">input — Ngay khi đang gõ phím</option>
+                <option value="enter">enter — Khi nhấn phím Enter</option>
+                <option value="click">click — Khi nhấp chuột vào phần tử</option>
+              </select>
+            </div>
+            <div class="form-col" style="width: 110px;">
+              <label class="field-label" title="Thời gian chờ thêm cố định sau khi Web đã xử lý xong">Chờ thêm
+                (ms)</label>
+              <input type="number" id="inpTriggerWaitMs" class="inp" min="0" max="10000" step="50" value="0" />
+            </div>
+          </div>
+
+          <div class="protect-box mt-8" style="background:#f0fdf4; border-color:#86efac;">
+            <div class="form-row" style="align-items:center; justify-content:space-between;">
+              <label class="checkbox-row flex-1" style="font-weight:600; color:#065f46;">
+                <input type="checkbox" id="chkWaitForSettled" checked />
+                <span>⏳ Tự động chờ Event / API ngầm &amp; DOM của Web hoàn tất</span>
+              </label>
+              <div id="wrapMaxSettleMs" style="display:flex; align-items:center; gap:5px; flex-shrink:0;">
+                <span style="font-size:11px; color:#047857; font-weight:600;">Tối đa:</span>
+                <input type="number" id="inpMaxSettleMs" class="inp"
+                  style="width:76px; padding:4px 6px; font-size:12px;" min="200" max="15000" step="100" value="3000"
+                  title="Thời gian chờ tối đa (ms) phòng trường hợp mạng treo" />
+                <span style="font-size:11px; color:#047857;">ms</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- KHỐI 3: DANH SÁCH RULE (HIỂN THỊ DẠNG TABLE) -->
+        <section class="card-section">
+          <div class="section-header-row">
+            <div>
+              <div class="section-title" style="margin-bottom:2px;">3. Danh sách Rule</div>
+              <div class="field-hint" style="margin-top:0;">
+                Click vào từng dòng trong bảng để mở popup tùy chỉnh phương thức và quy tắc.
+              </div>
+            </div>
+            <button type="button" id="btnAddRuleRow" class="btn btn-primary btn-sm">
+              ＋ Thêm Rule
+            </button>
+          </div>
+
+          <div id="rulesTableWrapper" class="table-wrapper mt-8"></div>
+        </section>
+      </div>
+
+      <footer class="editor-footer">
+        <span id="draftStatusText" class="draft-hint">Tự động lưu nháp khi chỉnh sửa</span>
+        <div class="footer-btns">
+          <button type="button" id="btnDiscardDraft" class="btn btn-ghost">Hủy bỏ</button>
+          <button type="button" id="btnSaveScenarioBottom" class="btn btn-primary">💾 Lưu Kịch bản</button>
+        </div>
+      </footer>
+    </main>
+
+    <!-- =================================================================== -->
+    <!-- CHÂN TRANG CỐ ĐỊNH: KHUYẾN CÁO NGHIỆP VỤ & THÔNG TIN TÁC GIẢ       -->
+    <!-- =================================================================== -->
+    <footer class="global-bottom-bar">
+      <div class="disclaimer-box">
+        ⚠️ <b>Khuyến cáo:</b> Công cụ chỉ thực hiện tự động nhập liệu thông minh theo cấu hình. Thao tác tự động hoặc
+        Script/Plugin tùy chỉnh có thể kích hoạt các sự kiện ngầm làm thay đổi nghiệp vụ không mong muốn trên hệ thống
+        đích — người dùng và IT cần kiểm thử kỹ trước khi áp dụng chính thức.
+      </div>
+      <div class="author-bar">
+        <img src="../icons/icon48.png" alt="VP" class="author-logo" />
+        <span>Author:
+          <a href="https://www.facebook.com/phamminhvien" target="_blank" rel="noopener noreferrer" class="author-link">
+            Vien Pham - IT Bệnh viện ĐKKV Ba Tơ
+          </a>
+        </span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MODAL POPUP TÙY CHỈNH CHI TIẾT 1 RULE (MỞ KHI CLICK VÀO ROW TABLE)    -->
+  <!-- ===================================================================== -->
+  <div id="ruleModalOverlay" class="modal-overlay hidden">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div id="ruleModalTitle" class="modal-title">Tùy chỉnh Rule</div>
+        <button type="button" id="btnCloseRuleModal" class="modal-close" title="Đóng">✕</button>
+      </div>
+
+      <div id="ruleModalBody" class="modal-body"></div>
+
+      <div class="modal-footer">
+        <button type="button" id="btnCancelRuleModal" class="btn btn-ghost">Hủy</button>
+        <button type="button" id="btnApplyRuleModal" class="btn btn-primary">✓ Lưu Rule</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nạp danh sách Plugin JS chung trước khi chạy Controller -->
+  <script src="../plugins/custom-plugins.js"></script>
+  <script src="popup.js"></script>
+</body>
+
+</html>
