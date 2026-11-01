@@ -1,0 +1,231 @@
+{
+  "app": "BATO_SMART_FILL",
+  "version": "1.3.0",
+  "exportedAt": "2026-11-01T15:20:00.000Z",
+  "scenarios": [
+    {
+      "id": "scn_demo_1_full_methods",
+      "name": "[Demo 1] Tiếp nhận + Chờ API 550ms (Đủ 4 Phương thức Rule)",
+      "enabled": true,
+      "urlPattern": "*/demo/demo.html*",
+      "triggerSelector": "#txtNamSinh",
+      "triggerEvent": "auto",
+      "triggerWaitMs": 0,
+      "waitForSettled": true,
+      "maxSettleMs": 3000,
+      "targets": [
+        {
+          "id": "rule_d1_fixed_quoctich",
+          "enabled": true,
+          "selector": "input[name=\"QuocTich\"]",
+          "actionType": "input",
+          "delayMs": 0,
+          "mode": "fixed",
+          "fixedValue": "Việt Nam",
+          "keepValues": "Nước ngoài",
+          "onlyIfEmpty": true
+        },
+        {
+          "id": "rule_d1_mapping_doituong",
+          "enabled": true,
+          "selector": "#cboDoiTuong",
+          "actionType": "select_value",
+          "delayMs": 0,
+          "mode": "mapping",
+          "mappings": [
+            {
+              "sourceSelector": "#txtTuoi",
+              "operator": "lt",
+              "matchValue": "6",
+              "resultAction": "fill",
+              "outputValue": "TE6"
+            },
+            {
+              "sourceSelector": "#txtTuoi",
+              "operator": "gte",
+              "matchValue": "80",
+              "resultAction": "fill",
+              "outputValue": "NCT80"
+            },
+            {
+              "sourceSelector": "#txtTuoi",
+              "operator": "gte",
+              "matchValue": "60",
+              "resultAction": "fill",
+              "outputValue": "NCT"
+            }
+          ],
+          "mappingFallbackMode": "fixed",
+          "mappingFallbackValue": "BHYT"
+        },
+        {
+          "id": "rule_d1_script_nghenghiep",
+          "enabled": true,
+          "selector": "select[name=\"MaNgheNghiep\"]",
+          "actionType": "select_value",
+          "delayMs": 0,
+          "mode": "script",
+          "scriptCode": "(triggerVal, { currentVal, currentText, getVal }) => {\n  const age = Number(getVal('#txtTuoi'));\n  console.log('[Demo1-PT3] Năm sinh:', triggerVal, '| Tuổi sau API:', age, '| Nghề hiện tại:', currentVal, currentText);\n  if (Number.isNaN(age) || getVal('#txtTuoi') === '') return null;\n\n  // Giữ nguyên các nghề đặc thù (VD: 10 - Công an, 11 - Quân đội)\n  const autoManaged = ['1', '6', '3', '4', '139'];\n  if (!autoManaged.includes(currentVal)) {\n    return null;\n  }\n\n  if (age < 6) return '3';     // Trẻ em\n  if (age < 18) return '4';    // Học sinh / Sinh viên\n  if (age >= 60) return '139'; // Hưu trí / Người cao tuổi\n\n  // Độ tuổi 18 - 59: Nếu đang là Nông dân ('6') thì giữ nguyên, còn lại chuyển sang Nông dân ('6')\n  if (currentVal === '6') return null;\n  return '6';\n}"
+        },
+        {
+          "id": "rule_d1_plugin_phongkham_ajax",
+          "enabled": true,
+          "selector": "#cboPhongKhamAjax",
+          "actionType": "auto",
+          "delayMs": 0,
+          "mode": "plugin",
+          "pluginName": "select2_auto_select",
+          "pluginParams": "{\n  \"mode\": \"ui_search\",\n  \"sourceRules\": [\n    { \"sourceSelector\": \"#txtTuoi\", \"lt\": 16, \"keyword\": \"Phòng khám Nhi\" },\n    { \"sourceSelector\": \"#txtTuoi\", \"gte\": 60, \"keyword\": \"Phòng khám Lão khoa\" }\n  ],\n  \"keyword\": \"Phòng khám Đa khoa\",\n  \"skipTexts\": [\"Cấp cứu\"]\n}"
+        }
+      ]
+    },
+    {
+      "id": "scn_demo_2_dynamic_vitals",
+      "name": "[Demo 2] Sinh hiệu JS không ID/Name, Ô đôi Huyết áp & Chống trùng vùng",
+      "enabled": true,
+      "urlPattern": "*/demo/demo.html*",
+      "triggerSelector": "(//label[normalize-space(.)=\"Nhiệt độ (°C)\"]/following::input)[1]",
+      "triggerEvent": "auto",
+      "triggerWaitMs": 0,
+      "waitForSettled": true,
+      "maxSettleMs": 2000,
+      "targets": [
+        {
+          "id": "rule_d2_scoped_ghichu",
+          "enabled": true,
+          "selector": "#boxKhamBenh input.form-control[name=\"GhiChu\"]",
+          "actionType": "input",
+          "delayMs": 0,
+          "mode": "mapping",
+          "mappings": [
+            {
+              "sourceSelector": "",
+              "operator": "gte",
+              "matchValue": "38.5",
+              "resultAction": "fill",
+              "outputValue": "Sốt cao >= 38.5°C — Cần theo dõi sát sinh hiệu!"
+            },
+            {
+              "sourceSelector": "",
+              "operator": "gte",
+              "matchValue": "37.5",
+              "resultAction": "fill",
+              "outputValue": "Sốt nhẹ — Theo dõi thân nhiệt"
+            }
+          ],
+          "mappingFallbackMode": "fixed",
+          "mappingFallbackValue": "Thân nhiệt bình thường"
+        },
+        {
+          "id": "rule_d2_bp_sys",
+          "enabled": true,
+          "selector": "(//label[normalize-space(.)=\"Huyết áp (mmHg)\"]/following::input)[1]",
+          "actionType": "input",
+          "delayMs": 0,
+          "mode": "fixed",
+          "fixedValue": "120",
+          "keepValues": "",
+          "onlyIfEmpty": true
+        },
+        {
+          "id": "rule_d2_bp_dia",
+          "enabled": true,
+          "selector": "(//label[normalize-space(.)=\"Huyết áp (mmHg)\"]/following::input)[2]",
+          "actionType": "input",
+          "delayMs": 0,
+          "mode": "fixed",
+          "fixedValue": "80",
+          "keepValues": "",
+          "onlyIfEmpty": true
+        },
+        {
+          "id": "rule_d2_chk_sot",
+          "enabled": true,
+          "selector": "input[formcontrolname=\"canTheoDoiSot\"]",
+          "actionType": "checkbox",
+          "delayMs": 0,
+          "mode": "script",
+          "scriptCode": "(triggerVal) => {\n  const temp = Number(triggerVal);\n  if (Number.isNaN(temp) || String(triggerVal).trim() === '') return null;\n  return temp >= 38.5;\n}"
+        }
+      ]
+    },
+    {
+      "id": "scn_demo_3_rx_table_rows",
+      "name": "[Demo 3] Bảng Kê đơn thuốc động nhiều dòng giống hệt nhau (row:)",
+      "enabled": true,
+      "urlPattern": "*/demo/demo.html*",
+      "triggerSelector": "#tblDonThuoc select.cbo-duong-dung",
+      "triggerEvent": "auto",
+      "triggerWaitMs": 0,
+      "waitForSettled": false,
+      "maxSettleMs": 1500,
+      "targets": [
+        {
+          "id": "rule_d3_row_cachdung",
+          "enabled": true,
+          "selector": "row: input.inp-cach-dung",
+          "actionType": "input",
+          "delayMs": 0,
+          "mode": "mapping",
+          "mappings": [
+            {
+              "sourceSelector": "",
+              "operator": "eq",
+              "matchValue": "UONG",
+              "resultAction": "fill",
+              "outputValue": "Ngày uống 2 lần (Sáng - Tối), sau ăn"
+            },
+            {
+              "sourceSelector": "",
+              "operator": "eq",
+              "matchValue": "TIEM",
+              "resultAction": "fill",
+              "outputValue": "Tiêm tĩnh mạch chậm theo y lệnh bác sĩ"
+            },
+            {
+              "sourceSelector": "",
+              "operator": "eq",
+              "matchValue": "BOI",
+              "resultAction": "fill",
+              "outputValue": "Bôi lớp mỏng ngoài da vùng tổn thương"
+            }
+          ],
+          "mappingFallbackMode": "keep",
+          "mappingFallbackValue": ""
+        },
+        {
+          "id": "rule_d3_row_soluong",
+          "enabled": true,
+          "selector": "row: input.inp-so-luong",
+          "actionType": "input",
+          "delayMs": 0,
+          "mode": "script",
+          "scriptCode": "(triggerVal, { getVal }) => {\n  if (!triggerVal) return null;\n  if (triggerVal === 'BOI') return '1';\n  const sang = Number(getVal('row: input.inp-sang')) || 0;\n  const toi = Number(getVal('row: input.inp-toi')) || 0;\n  const days = Number(getVal('row: input.inp-so-ngay')) || 0;\n  const total = (sang + toi) * days;\n  console.log('[Demo3-Row] Tính SL dòng hiện tại:', { sang, toi, days, total });\n  return total > 0 ? String(total) : null;\n}"
+        }
+      ]
+    },
+    {
+      "id": "scn_demo_4_icd_select2_ajax",
+      "name": "[Demo 4] Gợi ý lâm sàng -> Tự tìm mã ICD-10 Select2 AJAX (Plugin JS)",
+      "enabled": true,
+      "urlPattern": "*/demo/demo.html*",
+      "triggerSelector": "#cboGoiYLamSang",
+      "triggerEvent": "auto",
+      "triggerWaitMs": 0,
+      "waitForSettled": false,
+      "maxSettleMs": 2000,
+      "targets": [
+        {
+          "id": "rule_d4_icd_ajax",
+          "enabled": true,
+          "selector": "#cboIcdAjax",
+          "actionType": "auto",
+          "delayMs": 0,
+          "mode": "plugin",
+          "pluginName": "select2_auto_select",
+          "pluginParams": "{\n  \"mode\": \"ui_search\",\n  \"keywordMap\": {\n    \"SXH\": \"A97\",\n    \"THA\": \"I10\",\n    \"VIEM_HONG\": \"J02\"\n  }\n}"
+        }
+      ]
+    }
+  ]
+}

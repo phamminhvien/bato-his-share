@@ -266,6 +266,18 @@ body {
   gap: 5px;
 }
 
+.btn-demo {
+  background: #eff6ff;
+  color: #0369a1;
+  border: 1px solid #7dd3fc;
+}
+
+.btn-demo:hover {
+  background: #e0f2fe;
+  border-color: #38bdf8;
+  color: #075985;
+}
+
 .toast-toggle {
   display: inline-flex;
   align-items: center;

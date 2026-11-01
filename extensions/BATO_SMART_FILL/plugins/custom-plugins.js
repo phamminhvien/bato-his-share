@@ -73,10 +73,10 @@
   registerBatoPlugin('select2_auto_select', {
     name: 'Select2: Tự động chọn mục (Hỗ trợ cả Select2 Tĩnh & Tìm kiếm AJAX)',
     description:
-      'Hỗ trợ 2 chế độ: "ui_search" (tự mở ô Select2, gõ từ khóa chờ API trả danh sách rồi click chọn) hoặc "inject" (gán trực tiếp value/text qua cầu nối Select2).',
+      'Hỗ trợ 2 chế độ: "ui_search" (tự mở ô Select2, gõ từ khóa chờ API trả danh sách rồi click chọn; hỗ trợ cả keywordMap & sourceRules) hoặc "inject" (gán trực tiếp value/text qua cầu nối Select2).',
     defaultParams:
       '{"mode": "ui_search", "keyword": "Học sinh", "value": "", "skipTexts": ["Công an", "Quân đội"]}',
-    handler: async ({ targetEl, currentVal, currentText, params, helpers }) => {
+    handler: async ({ triggerVal, triggerText, targetEl, currentVal, currentText, params, helpers }) => {
       if (!targetEl) return null;
       const cfg =
         typeof params === 'object' && params !== null
@@ -94,9 +94,51 @@
         return null;
       }
 
-      const keyword = String(cfg.keyword ?? cfg.text ?? '').trim();
+      // 2. Xác định từ khóa tìm kiếm (hỗ trợ keywordMap theo triggerVal, sourceRules theo ô khác, hoặc keyword cố định)
+      let resolvedKeyword = '';
+      if (cfg.keywordMap && typeof cfg.keywordMap === 'object') {
+        const keyTrim = String(triggerVal ?? '').trim();
+        const txtTrim = String(triggerText ?? '').trim();
+        if (keyTrim in cfg.keywordMap) {
+          resolvedKeyword = String(cfg.keywordMap[keyTrim] ?? '');
+        } else if (txtTrim in cfg.keywordMap) {
+          resolvedKeyword = String(cfg.keywordMap[txtTrim] ?? '');
+        }
+      }
+
+      if (!resolvedKeyword && Array.isArray(cfg.sourceRules)) {
+        for (const sr of cfg.sourceRules) {
+          if (!sr || typeof sr !== 'object') continue;
+          const rawSrc = sr.sourceSelector ? helpers.getVal(sr.sourceSelector) : triggerVal;
+          const strSrc = String(rawSrc ?? '').trim();
+          const numSrc = Number(strSrc);
+          let ok = false;
+          if (sr.eq !== undefined) ok = strSrc.toLowerCase() === String(sr.eq).trim().toLowerCase();
+          else if (sr.lt !== undefined) ok = strSrc !== '' && !Number.isNaN(numSrc) && numSrc < Number(sr.lt);
+          else if (sr.lte !== undefined) ok = strSrc !== '' && !Number.isNaN(numSrc) && numSrc <= Number(sr.lte);
+          else if (sr.gt !== undefined) ok = strSrc !== '' && !Number.isNaN(numSrc) && numSrc > Number(sr.gt);
+          else if (sr.gte !== undefined) ok = strSrc !== '' && !Number.isNaN(numSrc) && numSrc >= Number(sr.gte);
+          if (ok && sr.keyword) {
+            resolvedKeyword = String(sr.keyword);
+            break;
+          }
+        }
+      }
+
+      const keyword = String(resolvedKeyword || cfg.keyword || cfg.text || '').trim();
       const val = String(cfg.value ?? '').trim();
       if (!keyword && !val) return null;
+
+      // Bỏ qua nếu ô Select2 hiện tại đã chọn sẵn đúng mục chứa từ khóa này
+      const searchLower = (keyword || val).toLowerCase();
+      if (
+        currentVal &&
+        currentText &&
+        (currentText.trim().toLowerCase() === searchLower ||
+          currentText.trim().toLowerCase().includes(searchLower))
+      ) {
+        return null;
+      }
 
       // Chế độ A: Gán nhanh qua jQuery Select2 API (tự tạo <option> nếu là Select2 AJAX biết trước mã + tên)
       if (cfg.mode === 'inject') {
@@ -120,10 +162,17 @@
         return { handled: true };
       }
 
-      // Mở dropdown Select2 (hỗ trợ cả v4 mousedown và v3 mousedown/click)
-      triggerBox.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-      triggerBox.click();
-      await helpers.sleep(60);
+      // Ưu tiên mở qua jQuery Select2 API ở MAIN world, dự phòng mousedown vật lý nếu cần
+      if (typeof helpers.openSelect2 === 'function') {
+        helpers.openSelect2(ctrl);
+        await helpers.sleep(40);
+      }
+      if (!document.querySelector('.select2-container--open, .select2-drop-active')) {
+        triggerBox.dispatchEvent(
+          new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, buttons: 1 })
+        );
+        await helpers.sleep(50);
+      }
 
       // Tìm ô gõ tìm kiếm đang mở của Select2
       const searchInputs = Array.from(
@@ -141,7 +190,6 @@
       }
 
       // Chờ API tìm kiếm của Select2 tải xong danh sách (tối đa 3000ms)
-      const searchLower = (keyword || val).toLowerCase();
       const deadline = Date.now() + (parseInt(cfg.timeoutMs, 10) || 3000);
       let matchedItem = null;
 
@@ -154,7 +202,7 @@
 
         const options = Array.from(
           document.querySelectorAll(
-            '.select2-container--open .select2-results__option[role="option"], .select2-container--open .select2-results__option[role="treeitem"], .select2-drop-active .select2-result-selectable'
+            '.select2-container--open .select2-results__option[role="option"], .select2-container--open .select2-results__option[role="treeitem"], .select2-container--open .select2-results__option[aria-selected], .select2-drop-active .select2-result-selectable'
           )
         ).filter(
           (li) =>
@@ -173,13 +221,24 @@
       }
 
       if (matchedItem) {
-        matchedItem.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+        if (matchedItem.getAttribute('aria-selected') === 'true') {
+          if (typeof helpers.closeSelect2 === 'function') helpers.closeSelect2(ctrl);
+          return null;
+        }
+        matchedItem.dispatchEvent(
+          new MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 0, buttons: 1 })
+        );
         matchedItem.click();
+        if (typeof helpers.highlight === 'function') helpers.highlight(ctrl);
         return { handled: true, detail: `Đã chọn Select2: ${matchedItem.textContent.trim()}` };
       }
 
       // Đóng dropdown nếu không tìm thấy để không che giao diện
-      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      if (typeof helpers.closeSelect2 === 'function') {
+        helpers.closeSelect2(ctrl);
+      } else {
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      }
       return null;
     }
   });

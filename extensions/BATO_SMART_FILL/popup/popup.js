@@ -487,6 +487,17 @@
         refreshActiveTab();
       }
     });
+
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'local') return;
+      if (changes.rules && Array.isArray(changes.rules.newValue)) {
+        state.scenarios = changes.rules.newValue.map(sanitizeScenario);
+        renderHeader();
+        if (!state.editingScenario) {
+          renderScenariosList();
+        }
+      }
+    });
   }
 
   // ==========================================================================
@@ -554,10 +565,14 @@
             Tạo một Kịch bản để bắt sự kiện từ Element chính và thực thi Danh sách Rule
             tự động điền/chọn dữ liệu tương ứng.
           </p>
-          <button type="button" id="btnEmptyCreate" class="btn btn-primary">＋ Tạo Kịch bản đầu tiên</button>
+          <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+            <button type="button" id="btnEmptyCreate" class="btn btn-primary">＋ Tạo Kịch bản đầu tiên</button>
+            <button type="button" id="btnEmptyDemo" class="btn btn-demo">🧪 Mở trang Demo &amp; Kịch bản mẫu</button>
+          </div>
         </div>
       `;
       document.getElementById('btnEmptyCreate')?.addEventListener('click', handleCreateNewScenario);
+      document.getElementById('btnEmptyDemo')?.addEventListener('click', openBuiltInDemoLab);
       return;
     }
 
@@ -677,9 +692,22 @@
   // ==========================================================================
   // TRÌNH CHỈNH SỬA KỊCH BẢN & BẢNG DANH SÁCH RULE (TABLE)
   // ==========================================================================
+  function isOwnDemoTabUrl(url) {
+    if (!url) return false;
+    return url.startsWith(chrome.runtime.getURL('demo/'));
+  }
+
   function getSuggestedUrlFromActiveTab(mode = 'origin') {
     const rawUrl = state.activeTab && state.activeTab.url ? state.activeTab.url : '';
-    if (!rawUrl || rawUrl.startsWith('chrome://') || rawUrl.startsWith('edge://')) return '';
+    if (isOwnDemoTabUrl(rawUrl)) return '*/demo/demo.html*';
+    if (
+      !rawUrl ||
+      rawUrl.startsWith('chrome://') ||
+      rawUrl.startsWith('edge://') ||
+      rawUrl.startsWith('chrome-extension://')
+    ) {
+      return '';
+    }
     try {
       const parsed = new URL(rawUrl);
       if (parsed.protocol === 'file:') {
@@ -1662,6 +1690,57 @@
     } catch (_) {}
   }
 
+  async function sendMessageToActivePage(tab, payload) {
+    if (isOwnDemoTabUrl(tab.url)) {
+      return await chrome.runtime.sendMessage({
+        ...payload,
+        targetTabId: tab.id
+      });
+    }
+    await ensureContentScriptsReady(tab.id);
+    return await chrome.tabs.sendMessage(tab.id, payload);
+  }
+
+  async function openBuiltInDemoLab() {
+    try {
+      const resp = await fetch(chrome.runtime.getURL('demo/demo-scenarios.json'));
+      if (resp.ok) {
+        const data = await resp.json();
+        const demoItems = Array.isArray(data.scenarios) ? data.scenarios : [];
+        const existingFps = new Set(state.scenarios.map(buildScenarioFingerprint));
+        const usedNames = new Set(state.scenarios.map((s) => normalizeScenarioName(s.name)));
+        const toAdd = [];
+
+        for (const raw of demoItems) {
+          const clean = sanitizeScenario(raw);
+          const fp = buildScenarioFingerprint(clean);
+          if (existingFps.has(fp)) continue;
+          clean.name = generateUniqueScenarioName(clean.name, usedNames);
+          usedNames.add(normalizeScenarioName(clean.name));
+          existingFps.add(fp);
+          toAdd.push(clean);
+        }
+
+        if (toAdd.length > 0) {
+          state.scenarios = [...toAdd, ...state.scenarios];
+          await chrome.storage.local.set({ rules: state.scenarios });
+        }
+      }
+    } catch (_) {}
+
+    const demoUrl = chrome.runtime.getURL('demo/demo.html');
+    const winTabs = await chrome.tabs.query({ currentWindow: true });
+    const existingDemoTab = winTabs.find((t) => t.url && t.url.startsWith(demoUrl));
+
+    if (existingDemoTab && existingDemoTab.id) {
+      await chrome.tabs.update(existingDemoTab.id, { active: true });
+    } else {
+      await chrome.tabs.create({ url: demoUrl, active: true });
+    }
+
+    await refreshActiveTab();
+  }
+
   async function startPickerOnActivePage(field, mappingIndex, labelHint) {
     await refreshActiveTab();
     if (!state.activeTab || !state.activeTab.id) {
@@ -1673,7 +1752,7 @@
     if (
       url.startsWith('chrome://') ||
       url.startsWith('edge://') ||
-      url.startsWith('chrome-extension://')
+      (url.startsWith('chrome-extension://') && !isOwnDemoTabUrl(url))
     ) {
       alert('Trình duyệt không cho phép chọn phần tử trên trang nội bộ hệ thống. Hãy mở trang web cần cấu hình ở khung bên trái!');
       return;
@@ -1687,10 +1766,8 @@
       }
     });
 
-    await ensureContentScriptsReady(state.activeTab.id);
-
     try {
-      await chrome.tabs.sendMessage(state.activeTab.id, {
+      await sendMessageToActivePage(state.activeTab, {
         type: 'BATO_START_PICKER',
         labelHint
       });
@@ -1707,14 +1784,33 @@
     await refreshActiveTab();
     if (!state.activeTab || !state.activeTab.id) return;
 
-    await ensureContentScriptsReady(state.activeTab.id);
+    if (/^row\s*:/i.test(selector.trim())) {
+      const subSel = selector.trim().replace(/^row\s*:\s*/i, '');
+      const res = await sendMessageToActivePage(state.activeTab, {
+        type: 'BATO_HIGHLIGHT_SELECTOR',
+        selector: subSel
+      });
+      if (!res || res.count === 0) {
+        alert(`Không tìm thấy phần tử dòng nào khớp với "${subSel}" trên trang hiện tại.`);
+      } else {
+        alert(
+          `Chế độ dòng động (row:): Tìm thấy ${res.count} dòng có "${subSel}". Khi chạy thực tế, hệ thống sẽ tự khóa đúng 1 dòng nơi bạn vừa thao tác!`
+        );
+      }
+      return;
+    }
+
     try {
-      const res = await chrome.tabs.sendMessage(state.activeTab.id, {
+      const res = await sendMessageToActivePage(state.activeTab, {
         type: 'BATO_HIGHLIGHT_SELECTOR',
         selector
       });
       if (!res || res.count === 0) {
-        alert(`Không tìm thấy phần tử nào khớp với "${selector}" trên trang hiện tại.`);
+        alert(`❌ Không tìm thấy phần tử nào khớp với "${selector}" trên trang hiện tại.`);
+      } else if (res.count > 1) {
+        alert(
+          `⚠️ Cảnh báo trùng lặp: Selector này đang khớp tới ${res.count} phần tử trên trang (đang đánh dấu màu cam #1 ➔ #${res.count} trên trang web).\n\nHãy dùng nút "🎯 Chọn" hoặc bổ sung vùng cha / nhãn chữ để khóa chính xác duy nhất 1 phần tử!`
+        );
       }
     } catch (_) {
       alert('Không thể kiểm tra trên trang này (hãy F5 lại trang web nếu vừa cài tiện ích).');
@@ -1739,6 +1835,8 @@
       state.showToast = e.target.checked;
       await chrome.storage.local.set({ showToast: state.showToast });
     });
+
+    document.getElementById('btnOpenDemoLab')?.addEventListener('click', openBuiltInDemoLab);
 
     document.querySelectorAll('.filter-chip').forEach((chip) => {
       chip.addEventListener('click', () => {

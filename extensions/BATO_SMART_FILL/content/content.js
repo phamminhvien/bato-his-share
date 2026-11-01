@@ -197,12 +197,28 @@
   }
 
   /**
-   * Tìm danh sách phần tử theo CSS Selector, XPath, hoặc ID/Name trần
+   * Tìm danh sách phần tử theo CSS Selector, XPath (// hoặc (//), tiền tố dòng tương đối (row:), hoặc ID/Name trần
    */
-  function queryElementsSmart(selectorStr) {
+  function queryElementsSmart(selectorStr, contextEl = null) {
     if (!selectorStr) return [];
     const raw = String(selectorStr).trim();
     if (!raw) return [];
+
+    // 0. Hỗ trợ tiền tố "row:" cho bảng/danh sách động sinh nhiều dòng giống hệt nhau
+    if (/^row\s*:/i.test(raw)) {
+      const subSel = raw.replace(/^row\s*:\s*/i, '').trim();
+      if (!subSel) return [];
+      const rowContainer =
+        contextEl instanceof Element
+          ? contextEl.closest('tr, [role="row"], .row-item, li') || contextEl.parentElement
+          : document;
+      if (!rowContainer) return [];
+      try {
+        return Array.from(rowContainer.querySelectorAll(subSel));
+      } catch (_) {
+        return [];
+      }
+    }
 
     // 1. Hỗ trợ XPath nếu bắt đầu bằng // hoặc (//
     if (raw.startsWith('//') || raw.startsWith('(//')) {
@@ -253,8 +269,8 @@
     return [];
   }
 
-  function findFirstElement(selectorStr) {
-    const list = queryElementsSmart(selectorStr);
+  function findFirstElement(selectorStr, contextEl = null) {
+    const list = queryElementsSmart(selectorStr, contextEl);
     return list.length > 0 ? list[0] : null;
   }
 
@@ -485,8 +501,8 @@
    * Điền/chọn dữ liệu cho phần tử đích
    * Trả về { status: 'updated' | 'unchanged' | 'not_found', detail: string }
    */
-  function applyValueToTarget(selectorStr, actionType, rawValue) {
-    const elements = queryElementsSmart(selectorStr);
+  function applyValueToTarget(selectorStr, actionType, rawValue, contextEl = null) {
+    const elements = queryElementsSmart(selectorStr, contextEl);
     if (elements.length === 0) {
       return { status: 'not_found', detail: `Không tìm thấy phần tử: ${selectorStr}` };
     }
@@ -653,7 +669,7 @@
   // ============================================================================
   // 4. ĐÁNH GIÁ GIÁ TRỊ THEO CHẾ ĐỘ (FIXED / MAPPING / CUSTOM JS)
   // ============================================================================
-  function collectDomSnapshotForScript(scriptCode) {
+  function collectDomSnapshotForScript(scriptCode, contextEl = null) {
     const snapshot = {};
 
     // 1. Quét tất cả input / select / textarea có id hoặc name trên trang
@@ -670,14 +686,20 @@
       }
     });
 
-    // 2. Quét thêm mọi chuỗi trong ngoặc kép/đơn của scriptCode (để lấy cả span/div/selector phức tạp)
+    // 2. Quét thêm mọi chuỗi trong ngoặc kép/đơn của scriptCode (hỗ trợ cả CSS phức tạp, XPath //, (//, và row:)
     const strRegex = /(['"`])((?:\\.|(?!\1)[^\\\r\n])*)\1/g;
     let match;
     while ((match = strRegex.exec(String(scriptCode || ''))) !== null) {
       const candidate = match[2].trim();
-      if (!candidate || candidate.length > 160 || snapshot[candidate]) continue;
-      if (/^[#.\[]/.test(candidate) || candidate.startsWith('//') || document.getElementById(candidate)) {
-        const el = findFirstElement(candidate);
+      if (!candidate || candidate.length > 320 || snapshot[candidate]) continue;
+      if (
+        candidate.startsWith('//') ||
+        candidate.startsWith('(//') ||
+        /^row\s*:/i.test(candidate) ||
+        /^[#.\[a-zA-Z]/.test(candidate) ||
+        document.getElementById(candidate)
+      ) {
+        const el = findFirstElement(candidate, contextEl);
         if (el) {
           snapshot[candidate] = readElementState(el);
         }
@@ -701,7 +723,7 @@
       .replace(/\{\{\s*today_vn\s*\}\}/gi, `${dd}/${mm}/${yyyy}`);
   }
 
-  function evaluateMappingRules(targetCfg, triggerVal) {
+  function evaluateMappingRules(targetCfg, triggerVal, contextEl = null) {
     const rows = Array.isArray(targetCfg.mappings) ? targetCfg.mappings : [];
 
     for (const row of rows) {
@@ -710,7 +732,7 @@
       // Cho phép tùy chỉnh Element nguồn điều kiện trên từng dòng (nếu để trống thì dùng Element chính)
       let sourceVal = triggerVal;
       if (row.sourceSelector && String(row.sourceSelector).trim() !== '') {
-        const customSourceEl = findFirstElement(row.sourceSelector);
+        const customSourceEl = findFirstElement(row.sourceSelector, contextEl);
         sourceVal = readElementState(customSourceEl).value;
       }
 
@@ -852,7 +874,7 @@
           await sleep(delayMs);
         }
 
-        const targetEl = targetCfg.selector ? findFirstElement(targetCfg.selector) : null;
+        const targetEl = targetCfg.selector ? findFirstElement(targetCfg.selector, triggerEl) : null;
         const targetState = readElementState(targetEl);
 
         if (targetCfg.selector && fillMode === 'fixed') {
@@ -865,9 +887,9 @@
         if (fillMode === 'fixed') {
           computedValue = resolveTemplateTokens(String(targetCfg.fixedValue ?? ''), triggerState);
         } else if (fillMode === 'mapping') {
-          computedValue = evaluateMappingRules(targetCfg, triggerState.value);
+          computedValue = evaluateMappingRules(targetCfg, triggerState.value, triggerEl);
         } else if (fillMode === 'script') {
-          const domSnapshot = collectDomSnapshotForScript(targetCfg.scriptCode);
+          const domSnapshot = collectDomSnapshotForScript(targetCfg.scriptCode, triggerEl);
           const evalRes = await chrome.runtime.sendMessage({
             type: 'BATO_EVAL_SCRIPT',
             scriptCode: targetCfg.scriptCode || '',
@@ -917,16 +939,37 @@
           try {
             const parsedParams = parsePluginParams(targetCfg.pluginParams);
             const pluginHelpers = {
-              getVal: (sel) => readElementState(findFirstElement(sel)).value,
-              getText: (sel) => readElementState(findFirstElement(sel)).text,
-              isChecked: (sel) => readElementState(findFirstElement(sel)).checked,
-              query: queryElementsSmart,
+              getVal: (sel) => readElementState(findFirstElement(sel, triggerEl)).value,
+              getText: (sel) => readElementState(findFirstElement(sel, triggerEl)).text,
+              isChecked: (sel) => readElementState(findFirstElement(sel, triggerEl)).checked,
+              query: (sel) => queryElementsSmart(sel, triggerEl),
               resolveControl: resolveUnderlyingControl,
               getVisibleEl: getVisibleControlElement,
-              setValue: (sel, val, act = 'auto') => applyValueToTarget(sel, act, val),
+              highlight: (elOrSel) => {
+                const rawTarget =
+                  elOrSel instanceof Element ? elOrSel : findFirstElement(elOrSel, triggerEl);
+                if (rawTarget) highlightElementBriefly(rawTarget);
+              },
+              openSelect2: (selOrEl) => {
+                const rawTarget =
+                  selOrEl instanceof Element ? selOrEl : findFirstElement(selOrEl, triggerEl);
+                const ctrl = resolveUnderlyingControl(rawTarget);
+                if (!ctrl) return false;
+                callMainWorldBridge(ctrl, { action: 'select2_open' });
+                return true;
+              },
+              closeSelect2: (selOrEl) => {
+                const rawTarget =
+                  selOrEl instanceof Element ? selOrEl : findFirstElement(selOrEl, triggerEl);
+                const ctrl = resolveUnderlyingControl(rawTarget);
+                if (!ctrl) return false;
+                callMainWorldBridge(ctrl, { action: 'select2_close' });
+                return true;
+              },
+              setValue: (sel, val, act = 'auto') => applyValueToTarget(sel, act, val, triggerEl),
               setSelect2: (selOrEl, opts = {}) => {
                 const rawTarget =
-                  selOrEl instanceof Element ? selOrEl : findFirstElement(selOrEl);
+                  selOrEl instanceof Element ? selOrEl : findFirstElement(selOrEl, triggerEl);
                 const ctrl = resolveUnderlyingControl(rawTarget);
                 if (!ctrl) return false;
                 callMainWorldBridge(ctrl, {
@@ -977,7 +1020,8 @@
         const applyRes = applyValueToTarget(
           targetCfg.selector,
           targetCfg.actionType || 'auto',
-          computedValue
+          computedValue,
+          triggerEl
         );
 
         if (applyRes.status === 'updated') {
@@ -1151,49 +1195,316 @@
   }, 650);
 
   // ============================================================================
-  // 7. CÔNG CỤ 🎯 ELEMENT PICKER TRỰC QUAN TRÊN TRANG WEB
+  // 7. CÔNG CỤ 🎯 ELEMENT PICKER & BỘ SINH SELECTOR THÔNG MINH CHO ELEMENT ĐỘNG
   // ============================================================================
   let pickerActive = false;
   let pickerOverlay = null;
   let pickerBanner = null;
   let pickerHoveredEl = null;
+  let lastComputedHoverEl = null;
+  let lastComputedHoverSel = '';
+
+  const DYNAMIC_ID_REGEX =
+    /^(:r|:R|mui-|radix-|headlessui-|el-id-|rc_select_|rc-tabs-|ant-|mat-input-|mat-select-|mat-option-|mat-mdc-|cdk-|pn_id_|pr_id_|select2-|s2id_autogen|ui-id-|ext-gen|ext-comp-|dx_|k-|ember\d+)/i;
+
+  const TRANSIENT_CLASS_REGEX =
+    /^(active|focus|focused|hover|open|opened|show|shown|selected|disabled|readonly|hidden|ng-|v-|is-|has-|js-|select2-|ant-select-|el-input|mui|cdk-|mat-)/i;
+
+  const SEMANTIC_ATTRS = [
+    'name',
+    'formcontrolname',
+    'ng-model',
+    'v-model',
+    'data-bind',
+    'data-testid',
+    'data-cy',
+    'data-field',
+    'data-name',
+    'data-column',
+    'data-key',
+    'aria-label',
+    'placeholder',
+    'title'
+  ];
+
+  function isStableElementId(id) {
+    if (!id || typeof id !== 'string') return false;
+    const trimmed = id.trim();
+    if (!trimmed || trimmed.length > 80 || /\s/.test(trimmed)) return false;
+    if (DYNAMIC_ID_REGEX.test(trimmed)) return false;
+    if (/^\d+$/.test(trimmed)) return false;
+    if (/[0-9a-f]{8}-[0-9a-f]{4}-/i.test(trimmed)) return false;
+    if (/[_-]\d{5,}$/.test(trimmed)) return false;
+    return true;
+  }
+
+  function getStableClasses(el, maxCount = 2) {
+    if (!el || !el.classList) return [];
+    const out = [];
+    for (const cls of el.classList) {
+      if (!cls || cls.length > 45) continue;
+      if (TRANSIENT_CLASS_REGEX.test(cls)) continue;
+      if (/[0-9a-f]{6,}/i.test(cls) || /\d{4,}/.test(cls)) continue;
+      out.push(cls);
+      if (out.length >= maxCount) break;
+    }
+    return out;
+  }
+
+  function toXPathLiteral(str) {
+    const s = String(str ?? '');
+    if (!s.includes('"')) return `"${s}"`;
+    if (!s.includes("'")) return `'${s}'`;
+    return `concat("${s.split('"').join('", \'"\', "')}")`;
+  }
+
+  function isExactUniqueMatch(selector, targetEl) {
+    if (!selector || !targetEl) return false;
+    const matches = queryElementsSmart(selector);
+    return matches.length === 1 && matches[0] === targetEl;
+  }
+
+  function cleanLabelText(raw) {
+    if (!raw) return '';
+    const norm = String(raw).replace(/\s+/g, ' ').trim();
+    if (!norm || norm.length > 55) return '';
+    // Bỏ qua chuỗi chỉ toàn số hoặc ký hiệu
+    if (!/[a-zA-ZÀ-ỹ]/.test(norm)) return '';
+    return norm;
+  }
+
+  function getDirectTextWithoutControls(node) {
+    if (!node) return '';
+    const clone = node.cloneNode(true);
+    clone
+      .querySelectorAll('input, select, textarea, button, script, style, .select2-container')
+      .forEach((c) => c.remove());
+    return cleanLabelText(clone.textContent || '');
+  }
 
   /**
-   * Tạo CSS Selector ngắn gọn, chính xác và bền vững nhất cho một phần tử DOM
+   * Trích xuất danh sách nhãn chữ (Label / Tiêu đề cột-dòng) đứng cạnh phần tử (dùng cho Element JS không có ID)
    */
-  function buildOptimalSelector(el) {
-    if (!el || !(el instanceof Element)) return '';
+  function extractNearbyLabelCandidates(el) {
+    const results = [];
+    const pushCandidate = (tagHint, exactText) => {
+      const cleaned = cleanLabelText(exactText);
+      if (!cleaned) return;
+      if (!results.some((r) => r.text === cleaned)) {
+        results.push({ tagHint, text: cleaned });
+      }
+      // Thêm biến thể cắt dấu * hoặc : ở cuối nếu có (ví dụ "Nhiệt độ (*):" -> "Nhiệt độ")
+      const stripped = cleanLabelText(cleaned.replace(/[\s*:()]+$/g, ''));
+      if (stripped && stripped.length >= 2 && stripped !== cleaned) {
+        if (!results.some((r) => r.text === stripped)) {
+          results.push({ tagHint, text: stripped, isPartial: true });
+        }
+      }
+    };
 
-    // 1. Ưu tiên ID nếu rõ ràng và duy nhất
-    if (el.id && !/^(:r|mui-|el-id-|rc_select_)/i.test(el.id)) {
-      const idSel = `#${CSS.escape(el.id)}`;
+    // 1. <label for="el.id"> (vẫn lấy được chữ chuẩn kể cả khi el.id là ID tự sinh của Angular/MUI!)
+    if (el.id) {
       try {
-        if (document.querySelectorAll(idSel).length === 1) return idSel;
+        const lblFor = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+        if (lblFor) pushCandidate('label', getDirectTextWithoutControls(lblFor));
       } catch (_) {}
     }
 
-    // 2. Ưu tiên thuộc tính định danh nghiệp vụ (name, formcontrolname, data-testid...)
+    // 2. aria-labelledby
+    const ariaLbl = el.getAttribute('aria-labelledby');
+    if (ariaLbl) {
+      ariaLbl.split(/\s+/).forEach((refId) => {
+        const refEl = document.getElementById(refId);
+        if (refEl) pushCandidate(refEl.tagName.toLowerCase(), getDirectTextWithoutControls(refEl));
+      });
+    }
+
+    // 3. Nằm bên trong thẻ <label>
+    const parentLabel = el.closest('label');
+    if (parentLabel) {
+      pushCandidate('label', getDirectTextWithoutControls(parentLabel));
+    }
+
+    // 4. Tìm nhãn đứng trước trong cùng cụm dòng (.form-group, tr, .row, .ant-form-item, .el-form-item...)
+    let curr = el;
+    for (let depth = 0; depth < 4 && curr && curr !== document.body; depth++) {
+      let prev = curr.previousElementSibling;
+      let steps = 0;
+      while (prev && steps < 3) {
+        const pTag = prev.tagName.toLowerCase();
+        if (['label', 'th', 'td', 'span', 'strong', 'b', 'div'].includes(pTag)) {
+          const txt = getDirectTextWithoutControls(prev);
+          if (txt) pushCandidate(pTag, txt);
+          const innerLbl = prev.querySelector && prev.querySelector('label, th, strong, b');
+          if (innerLbl) {
+            pushCandidate(innerLbl.tagName.toLowerCase(), getDirectTextWithoutControls(innerLbl));
+          }
+        }
+        prev = prev.previousElementSibling;
+        steps++;
+      }
+      curr = curr.parentElement;
+    }
+
+    return results;
+  }
+
+  /**
+   * Tạo Selector tối ưu, duy nhất (1-1) và bền vững nhất cho cả Element tĩnh lẫn Element tạo động bằng JS
+   */
+  function buildOptimalSelector(el) {
+    if (!el || !(el instanceof Element)) return '';
     const tag = el.tagName.toLowerCase();
-    const attrCandidates = ['name', 'formcontrolname', 'data-testid', 'data-field', 'id'];
-    for (const attr of attrCandidates) {
+
+    // TẦNG 1: ID tĩnh chuẩn xác và duy nhất (bỏ qua các ID tự sinh nhảy số của JS Framework)
+    if (isStableElementId(el.id)) {
+      const idSel = `#${CSS.escape(el.id)}`;
+      if (isExactUniqueMatch(idSel, el)) return idSel;
+    }
+
+    // Thu thập các đặc trưng thuộc tính của phần tử
+    const attrPairs = [];
+    for (const attr of SEMANTIC_ATTRS) {
       const val = el.getAttribute(attr);
-      if (val) {
-        const attrSel = `${tag}[${attr}="${CSS.escape(val)}"]`;
-        try {
-          if (document.querySelectorAll(attrSel).length === 1) return attrSel;
-        } catch (_) {}
+      if (val && val.trim() !== '' && val.length <= 90) {
+        attrPairs.push([attr, val]);
+      }
+    }
+    const stableClasses = getStableClasses(el, 2);
+    const classSuffix = stableClasses.map((c) => `.${CSS.escape(c)}`).join('');
+    const inputType =
+      tag === 'input' && el.getAttribute('type')
+        ? `[type="${CSS.escape(el.getAttribute('type'))}"]`
+        : '';
+
+    // TẦNG 2: Thuộc tính ràng buộc dữ liệu (đơn lẻ hoặc tổ hợp đa thuộc tính trên chính phần tử)
+    const elementSignatures = [];
+    for (const [attr, val] of attrPairs) {
+      const single = `${tag}[${attr}="${CSS.escape(val)}"]`;
+      if (isExactUniqueMatch(single, el)) return single;
+      elementSignatures.push(single);
+
+      if (classSuffix) {
+        const withCls = `${tag}${classSuffix}[${attr}="${CSS.escape(val)}"]`;
+        if (isExactUniqueMatch(withCls, el)) return withCls;
+        elementSignatures.push(withCls);
       }
     }
 
-    // 3. Xây dựng đường dẫn phân cấp tối giản từ phần tử lên cha gần nhất có ID
+    // Tổ hợp 2 thuộc tính (ví dụ trùng name nhưng khác placeholder hoặc value của radio)
+    if (tag === 'input' && (el.type === 'radio' || el.type === 'checkbox') && el.name && el.value) {
+      const radioSel = `input[name="${CSS.escape(el.name)}"][value="${CSS.escape(el.value)}"]`;
+      if (isExactUniqueMatch(radioSel, el)) return radioSel;
+      elementSignatures.unshift(radioSel);
+    }
+    for (let i = 0; i < attrPairs.length; i++) {
+      for (let j = i + 1; j < attrPairs.length; j++) {
+        const combo = `${tag}[${attrPairs[i][0]}="${CSS.escape(attrPairs[i][1])}"][${
+          attrPairs[j][0]
+        }="${CSS.escape(attrPairs[j][1])}"]`;
+        if (isExactUniqueMatch(combo, el)) return combo;
+        elementSignatures.push(combo);
+      }
+    }
+
+    if (classSuffix) {
+      const tagCls = `${tag}${inputType}${classSuffix}`;
+      if (isExactUniqueMatch(tagCls, el)) return tagCls;
+      elementSignatures.push(tagCls);
+    }
+
+    // Tìm danh sách các mỏ neo Khối cha ổn định (từ gần ra xa)
+    const ancestorAnchors = [];
+    let anc = el.parentElement;
+    while (anc && anc !== document.body && anc !== document.documentElement) {
+      if (isStableElementId(anc.id)) {
+        ancestorAnchors.push({ el: anc, css: `#${CSS.escape(anc.id)}`, xpathId: anc.id });
+      } else {
+        for (const pAttr of ['data-testid', 'data-section', 'formgroupname', 'name', 'id']) {
+          const pVal = anc.getAttribute(pAttr);
+          if (pVal && (pAttr !== 'id' || isStableElementId(pVal)) && pVal.length <= 60) {
+            ancestorAnchors.push({
+              el: anc,
+              css: `${anc.tagName.toLowerCase()}[${pAttr}="${CSS.escape(pVal)}"]`,
+              xpathId: null
+            });
+            break;
+          }
+        }
+        const ancClasses = getStableClasses(anc, 2);
+        if (ancClasses.length > 0) {
+          ancestorAnchors.push({
+            el: anc,
+            css: `${anc.tagName.toLowerCase()}${ancClasses.map((c) => `.${CSS.escape(c)}`).join('')}`,
+            xpathId: null
+          });
+        }
+      }
+      anc = anc.parentElement;
+    }
+
+    // TẦNG 3 (Cấp 1): Tổ hợp [Vùng chứa cha + Đặc trưng phần tử] để khử trùng lặp giữa các vùng/tab/modal
+    for (const anchor of ancestorAnchors) {
+      for (const sig of elementSignatures) {
+        const scopedCss = `${anchor.css} ${sig}`;
+        if (isExactUniqueMatch(scopedCss, el)) {
+          return scopedCss;
+        }
+      }
+    }
+
+    // TẦNG 4 (Cấp 2 & Cấp 3): Neo theo "Nhãn chữ hiển thị đứng cạnh" (XPath Text Anchor + Chỉ số cục bộ [1], [2])
+    const labelCandidates = extractNearbyLabelCandidates(el);
+    const nearestStableIdAnc = ancestorAnchors.find((a) => a.xpathId);
+
+    for (const lbl of labelCandidates) {
+      const lit = toXPathLiteral(lbl.text);
+      const allowedTags = ['label', 'th', 'td', 'span', 'strong', 'b'].includes(lbl.tagHint)
+        ? lbl.tagHint
+        : '*';
+      const textCond = lbl.isPartial
+        ? `starts-with(normalize-space(.), ${lit}) and string-length(normalize-space(.)) <= ${
+            lbl.text.length + 8
+          }`
+        : `normalize-space(.)=${lit}`;
+
+      // Thử trên toàn trang trước (gọn nhất), nếu nhãn bị trùng ở tab khác thì khoanh thêm @id của khối cha
+      const scopes = [''];
+      if (nearestStableIdAnc) {
+        scopes.push(`//*[@id=${toXPathLiteral(nearestStableIdAnc.xpathId)}]`);
+      }
+
+      for (const scopePrefix of scopes) {
+        for (let localIdx = 1; localIdx <= 4; localIdx++) {
+          const xpath = `(${scopePrefix}//${allowedTags}[${textCond}]/following::${tag})[${localIdx}]`;
+          if (isExactUniqueMatch(xpath, el)) {
+            return xpath;
+          }
+          if (allowedTags !== '*') {
+            const xpathAny = `(${scopePrefix}//*[${textCond} and not(.//*[${textCond}])]/following::${tag})[${localIdx}]`;
+            if (isExactUniqueMatch(xpathAny, el)) {
+              return xpathAny;
+            }
+          }
+        }
+      }
+    }
+
+    // TẦNG 5: Đường dẫn phân cấp tối giản neo vào Khối cha tĩnh gần nhất
     const parts = [];
     let current = el;
     while (current && current.nodeType === Node.ELEMENT_NODE && current !== document.body) {
       let part = current.tagName.toLowerCase();
-      if (current.id && !/^(:r|mui-)/i.test(current.id)) {
+      if (isStableElementId(current.id)) {
         part = `#${CSS.escape(current.id)}`;
         parts.unshift(part);
+        const candidate = parts.join(' > ');
+        if (isExactUniqueMatch(candidate, el)) return candidate;
         break;
+      }
+      const curClasses = getStableClasses(current, 1);
+      if (curClasses.length > 0 && current === el) {
+        part += `.${CSS.escape(curClasses[0])}`;
       }
       const parent = current.parentElement;
       if (parent) {
@@ -1207,11 +1518,9 @@
       }
       parts.unshift(part);
       const candidateSel = parts.join(' > ');
-      try {
-        if (document.querySelectorAll(candidateSel).length === 1) {
-          return candidateSel;
-        }
-      } catch (_) {}
+      if (isExactUniqueMatch(candidateSel, el)) {
+        return candidateSel;
+      }
       current = parent;
     }
 
@@ -1305,6 +1614,8 @@
   function stopElementPicker() {
     pickerActive = false;
     pickerHoveredEl = null;
+    lastComputedHoverEl = null;
+    lastComputedHoverSel = '';
     if (pickerOverlay) {
       pickerOverlay.remove();
       pickerOverlay = null;
@@ -1343,11 +1654,18 @@
     pickerOverlay.style.width = `${rect.width}px`;
     pickerOverlay.style.height = `${rect.height}px`;
 
-    const sel = buildOptimalSelector(pickerHoveredEl);
+    if (pickerHoveredEl !== lastComputedHoverEl) {
+      lastComputedHoverEl = pickerHoveredEl;
+      lastComputedHoverSel = buildOptimalSelector(pickerHoveredEl);
+    }
     const badge = pickerOverlay.firstElementChild;
     if (badge) {
       const s2Tag = underlying !== el ? ' (Select2)' : '';
-      badge.textContent = `<${pickerHoveredEl.tagName.toLowerCase()}>${s2Tag} ${sel}`;
+      const shortSel =
+        lastComputedHoverSel.length > 68
+          ? lastComputedHoverSel.slice(0, 65) + '...'
+          : lastComputedHoverSel;
+      badge.textContent = `<${pickerHoveredEl.tagName.toLowerCase()}>${s2Tag} ${shortSel}`;
     }
   }
 
@@ -1384,29 +1702,114 @@
     }
   }
 
-  // Nhận lệnh từ Popup (ví dụ: Bật Picker hoặc Kiểm tra Selector tồn tại trên trang)
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (!message || !message.type) return false;
+  /**
+   * Đánh dấu trực quan khi bấm nút 🔍 Kiểm tra Selector:
+   * - Khớp đúng 1 phần tử: Viền xanh ngọc + nhãn "✅ Khớp duy nhất (1/1)"
+   * - Khớp > 1 phần tử (bị trùng): Viền cam cảnh báo + đánh số "⚠️ Trùng #1/N", "#2/N"...
+   */
+  function highlightInspectionMatches(elements) {
+    // Xóa các nhãn kiểm tra cũ (nếu đang hiện)
+    document
+      .querySelectorAll('[id^="__bato_inspect_tag_"]')
+      .forEach((n) => n.remove());
 
+    if (!elements || elements.length === 0) return;
+
+    const isUnique = elements.length === 1;
+    const accentColor = isUnique ? '#10b981' : '#f59e0b';
+    const durationMs = isUnique ? 1800 : 2800;
+
+    const firstVisible = getVisibleControlElement(elements[0]);
+    if (firstVisible && firstVisible.scrollIntoView) {
+      firstVisible.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    elements.forEach((rawEl, idx) => {
+      const visEl = getVisibleControlElement(rawEl);
+      if (!visEl || !visEl.style) return;
+
+      const prevOutline = visEl.style.outline;
+      const prevOutlineOffset = visEl.style.outlineOffset;
+      visEl.style.outline = `2.5px solid ${accentColor}`;
+      visEl.style.outlineOffset = '1px';
+
+      const rect = visEl.getBoundingClientRect();
+      let tagBadge = null;
+      if (rect.width > 0 || rect.height > 0) {
+        tagBadge = document.createElement('div');
+        tagBadge.id = `__bato_inspect_tag_${idx}__`;
+        tagBadge.textContent = isUnique
+          ? '✅ Khớp duy nhất (1/1)'
+          : `⚠️ Trùng #${idx + 1}/${elements.length}`;
+        Object.assign(tagBadge.style, {
+          position: 'fixed',
+          top: `${Math.max(4, rect.top - 22)}px`,
+          left: `${Math.max(4, rect.left)}px`,
+          backgroundColor: isUnique ? '#065f46' : '#b45309',
+          color: '#ffffff',
+          fontSize: '11px',
+          fontWeight: '700',
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+          padding: '2px 7px',
+          borderRadius: '4px',
+          zIndex: '2147483647',
+          pointerEvents: 'none',
+          boxShadow: '0 2px 6px rgba(0,0,0,0.25)'
+        });
+        document.body.appendChild(tagBadge);
+      }
+
+      setTimeout(() => {
+        visEl.style.outline = prevOutline;
+        visEl.style.outlineOffset = prevOutlineOffset;
+        if (tagBadge) tagBadge.remove();
+      }, durationMs);
+    });
+
+    if (isUnique) {
+      showToast('✅ Chuẩn xác: Selector khớp duy nhất 1 phần tử!');
+    } else {
+      showToast(
+        `⚠️ Cảnh báo trùng: Selector đang khớp ${elements.length} phần tử (#1 ➔ #${elements.length})!`,
+        true
+      );
+    }
+  }
+
+  // Nhận lệnh từ Popup (ví dụ: Bật Picker hoặc Kiểm tra Selector tồn tại trên trang)
+  function dispatchRuntimePageCommand(message, sendResponse) {
     if (message.type === 'BATO_START_PICKER') {
-      // Chỉ bật trên top frame hoặc frame đang hiển thị chính
       if (window === window.top) {
         startElementPicker(message.labelHint);
       }
       sendResponse({ ok: true });
-      return false;
+      return;
     }
 
     if (message.type === 'BATO_HIGHLIGHT_SELECTOR') {
       const els = queryElementsSmart(message.selector);
-      els.forEach((el) => {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        highlightElementBriefly(el);
-      });
+      highlightInspectionMatches(els);
       sendResponse({ ok: true, count: els.length });
+    }
+  }
+
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (!message || !message.type) return false;
+    if (message.type !== 'BATO_START_PICKER' && message.type !== 'BATO_HIGHLIGHT_SELECTOR') {
       return false;
     }
 
+    // Khi gửi từ Side Panel sang trang Demo nội bộ (chrome-extension://.../demo/demo.html)
+    if (message.targetTabId) {
+      if (typeof chrome.tabs?.getCurrent !== 'function') return false;
+      chrome.tabs.getCurrent((myTab) => {
+        if (!myTab || myTab.id !== message.targetTabId) return;
+        dispatchRuntimePageCommand(message, sendResponse);
+      });
+      return true;
+    }
+
+    dispatchRuntimePageCommand(message, sendResponse);
     return false;
   });
 

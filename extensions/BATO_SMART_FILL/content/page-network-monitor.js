@@ -140,6 +140,20 @@
             $el.trigger('change');
           }
         }
+      } else if (payload.action === 'select2_open') {
+        if (typeof jq === 'function') {
+          const $el = jq(el);
+          if ($el && typeof $el.select2 === 'function') {
+            $el.select2('open');
+          }
+        }
+      } else if (payload.action === 'select2_close') {
+        if (typeof jq === 'function') {
+          const $el = jq(el);
+          if ($el && typeof $el.select2 === 'function') {
+            $el.select2('close');
+          }
+        }
       } else if (payload.action === 'select2_set') {
         const val = payload.value !== undefined && payload.value !== null ? String(payload.value) : '';
         const text = payload.text !== undefined && payload.text !== null ? String(payload.text) : val;

@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BATO_SMART_FILL — Phòng Kiểm Thử &amp; Hướng Dẫn Thực Hành</title>
+  <link rel="icon" href="../icons/icon48.png" />
+  <link rel="stylesheet" href="vendor/select2.min.css" />
+  <style>
+    :root {
+      --bg: #f1f5f9;
+      --card: #ffffff;
+      --border: #cbd5e1;
+      --text: #0f172a;
+      --muted: #64748b;
+      --primary: #059669;
+      --accent: #0284c7;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13.5px;
+      line-height: 1.45;
+      padding: 16px 20px 60px;
+    }
+    .lab-header {
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      color: #fff;
+      padding: 15px 18px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 14px;
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14);
+    }
+    .lab-brand { display: flex; align-items: center; gap: 12px; }
+    .lab-brand img { width: 38px; height: 38px; border-radius: 9px; }
+    .lab-header h1 { font-size: 17px; font-weight: 700; }
+    .lab-header p { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+    .header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      text-decoration: none;
+      transition: all 0.15s;
+    }
+    .btn-emerald { background: #10b981; color: #fff; }
+    .btn-emerald:hover { background: #059669; }
+    .btn-sky { background: #0284c7; color: #fff; }
+    .btn-sky:hover { background: #0369a1; }
+    .btn-outline { background: #fff; color: #1e293b; border-color: #cbd5e1; }
+    .btn-outline:hover { background: #f8fafc; }
+
+    .guide-banner {
+      background: #ecfdf5;
+      border: 1px solid #86efac;
+      color: #065f46;
+      padding: 10px 14px;
+      border-radius: 8px;
+      margin-bottom: 14px;
+      font-size: 12.5px;
+    }
+    .guide-banner code {
+      background: #d1fae5;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-family: Consolas, monospace;
+      font-weight: 600;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 14px 16px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+    .card-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+      padding-bottom: 10px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .card-title { font-size: 14.5px; font-weight: 700; color: #0f172a; }
+    .card-sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+    .tag-case {
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: #e0f2fe;
+      color: #0369a1;
+      white-space: nowrap;
+    }
+    .tag-case.purple { background: #ede9fe; color: #5b21b6; }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 12px;
+    }
+    .col-span-2 { grid-column: span 2; }
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .field label, .lbl {
+      font-size: 12px;
+      font-weight: 600;
+      color: #334155;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+    }
+    .hint-chip {
+      font-size: 10px;
+      font-weight: 600;
+      color: #64748b;
+      background: #f1f5f9;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-family: Consolas, monospace;
+    }
+    input[type="text"],
+    input[type="number"],
+    select {
+      width: 100%;
+      padding: 7px 9px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+      color: var(--text);
+      background: #fff;
+      outline: none;
+    }
+    input:focus, select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.14);
+    }
+    input[readonly] { background: #f8fafc; color: #0f172a; font-weight: 700; }
+
+    .api-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11.5px;
+      padding: 4px 9px;
+      border-radius: 6px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      color: #475569;
+    }
+    .api-status.busy {
+      background: #fffbeb;
+      border-color: #fde68a;
+      color: #b45309;
+      font-weight: 600;
+    }
+    .api-status.done {
+      background: #ecfdf5;
+      border-color: #86efac;
+      color: #065f46;
+      font-weight: 600;
+    }
+
+    .vital-row {
+      display: grid;
+      grid-template-columns: 155px 1fr;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .bp-pair {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .dynamic-alert {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+
+    .rx-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      font-size: 12.5px;
+    }
+    .rx-table th {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      padding: 7px 8px;
+      text-align: left;
+      font-size: 11.5px;
+      color: #475569;
+    }
+    .rx-table td {
+      border: 1px solid #e2e8f0;
+      padding: 6px;
+    }
+
+    .select2-container { width: 100% !important; }
+    .select2-container .select2-selection--single {
+      height: 34px !important;
+      border: 1px solid var(--border) !important;
+      border-radius: 6px !important;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__rendered {
+      line-height: 32px !important;
+      font-size: 13px;
+    }
+    .select2-container--default .select2-selection--single .select2-selection__arrow {
+      height: 32px !important;
+    }
+  </style>
+</head>
+<body>
+  <header class="lab-header">
+    <div class="lab-brand">
+      <img src="../icons/icon128.png" alt="VP" />
+      <div>
+        <h1>🧪 BATO_SMART_FILL — Phòng Kiểm Thử Toàn Diện (Tích hợp sẵn 100% Offline)</h1>
+        <p>Kiểm thử mọi trường hợp Chọn Element động (không ID / trùng thuộc tính / bảng nhiều dòng) &amp; đủ 4 Phương thức Rule + Chờ API ngầm</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button type="button" id="btnRestoreDemoScenarios" class="btn btn-emerald"
+        title="Nạp hoặc khôi phục lại 4 kịch bản mẫu gốc vào Extension">
+        ⚡ Nạp / Khôi phục 4 Kịch bản mẫu
+      </button>
+      <a href="./demo-scenarios.json" download="BATO_SMART_FILL_demo_scenarios.json" class="btn btn-outline"
+        title="Tải file .json mẫu để test tính năng Nhập / Chống trùng lặp">
+        📥 File mẫu .json
+      </a>
+      <button type="button" id="btnResetLab" class="btn btn-outline">🔄 Làm mới trang</button>
+    </div>
+  </header>
+
+  <div class="guide-banner">
+    <b>💡 Đã nạp sẵn 4 Kịch bản mẫu vào BATO_SMART_FILL bên phải màn hình!</b>
+    Bạn có thể trải nghiệm ngay:
+    1️⃣ Sửa <b>Năm sinh</b> (Khối 1: <code>2022</code>, <code>2012</code>, <code>1990</code>, <code>1955</code>) rồi nhấn <code>Tab</code>
+    • 2️⃣ Nhập <b>Nhiệt độ</b> (Khối 2: <code>39</code>)
+    • 3️⃣ Đổi <b>Đường dùng</b> ở từng dòng thuốc (Khối 3)
+    • 4️⃣ Chọn <b>Hội chứng</b> (Khối 4)
+    — Hoặc bấm <b>🎯 Chọn</b> / <b>🔍</b> trên Extension để thử bắt bất kỳ phần tử nào!
+  </div>
+
+  <div class="grid-2">
+    <!-- KHỐI 1 -->
+    <section id="boxHanhChinh" class="card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">1. Tiếp nhận Bệnh nhân (Test Kịch bản #1 &amp; Chọn Element)</div>
+          <div class="card-sub">
+            Đổi <b>Năm sinh</b> ➔ Web gọi API ngầm <code>550ms</code> tính <b>Tuổi</b> ➔ Extension tự chờ API xong mới chạy đủ 4 Phương thức!
+          </div>
+        </div>
+        <span class="tag-case">4 Phương thức + API</span>
+      </div>
+
+      <div style="margin-bottom: 10px;">
+        <div id="apiAgeStatus" class="api-status">⚡ Sẵn sàng: Hãy thử nhập Năm sinh (VD: 2022, 2012, 1990, 1955) rồi nhấn Tab</div>
+      </div>
+
+      <div class="form-grid">
+        <div class="field">
+          <label for="txtNamSinh">
+            <span>Năm sinh (Trigger) *</span>
+            <span class="hint-chip">ID tĩnh: #txtNamSinh</span>
+          </label>
+          <input type="number" id="txtNamSinh" placeholder="VD: 2012" min="1900" max="2026" />
+        </div>
+
+        <div class="field">
+          <label for="txtTuoi">
+            <span>Tuổi (Web gọi API 550ms tự tính)</span>
+            <span class="hint-chip">#txtTuoi</span>
+          </label>
+          <input type="number" id="txtTuoi" readonly placeholder="Tự tính sau 550ms..." />
+        </div>
+
+        <div class="field">
+          <label>
+            <span>Quốc tịch (PT1: Cố định)</span>
+            <span class="hint-chip">Không ID • name="QuocTich"</span>
+          </label>
+          <input type="text" name="QuocTich" placeholder="Trống -> tự điền Việt Nam" />
+        </div>
+
+        <div class="field">
+          <label for="cboDoiTuong">
+            <span>Đối tượng (PT2: Bảng ĐK)</span>
+            <span class="hint-chip">Mapping theo #txtTuoi</span>
+          </label>
+          <select id="cboDoiTuong">
+            <option value="">-- Chưa chọn --</option>
+            <option value="TE6">Trẻ em dưới 6 tuổi (Miễn phí)</option>
+            <option value="BHYT">Bảo hiểm y tế (18 - 59t)</option>
+            <option value="NCT">Người cao tuổi (60 - 79t)</option>
+            <option value="NCT80">Người cao tuổi >= 80 tuổi</option>
+          </select>
+        </div>
+
+        <div class="field col-span-2">
+          <label>
+            <span>Nghề nghiệp — Select2 Tĩnh (PT3: Script + Giữ nguyên nghề đặc thù)</span>
+            <span class="hint-chip">Select2 không ID • name="MaNgheNghiep"</span>
+          </label>
+          <select name="MaNgheNghiep" class="js-select2-static">
+            <option value="1" selected>1 - Công nhân (Sẽ tự đổi theo tuổi)</option>
+            <option value="6">6 - Nông dân (Đổi nếu &lt;18 hoặc &gt;=60, giữ nguyên 18-59)</option>
+            <option value="3">3 - Trẻ em (&lt; 6 tuổi)</option>
+            <option value="4">4 - Học sinh / Sinh viên (6 - 17 tuổi)</option>
+            <option value="139">139 - Hưu trí / Người cao tuổi (&gt;= 60 tuổi)</option>
+            <option value="10">10 - Công an (Giữ nguyên không đổi!)</option>
+            <option value="11">11 - Quân đội (Giữ nguyên không đổi!)</option>
+          </select>
+        </div>
+
+        <div class="field col-span-2">
+          <label for="cboPhongKhamAjax">
+            <span>Phòng khám — Select2 AJAX Động (PT4: Plugin JS tự mở gõ tìm)</span>
+            <span class="hint-chip">Select2 AJAX (280ms)</span>
+          </label>
+          <select id="cboPhongKhamAjax"></select>
+        </div>
+
+        <div class="field">
+          <label id="lblDynamicPhone">
+            <span>SĐT (ID ảo nhảy số khi F5)</span>
+            <span class="hint-chip" id="chipPhoneId">mat-input-???</span>
+          </label>
+          <input type="text" formcontrolname="soDienThoai" placeholder="Thử bấm 🎯 Chọn vào ô này!" />
+        </div>
+
+        <div class="field">
+          <label>
+            <span>Ghi chú (Trùng name="GhiChu" #1)</span>
+            <span class="hint-chip">#boxHanhChinh + name</span>
+          </label>
+          <input type="text" class="form-control" name="GhiChu" placeholder="Ghi chú Hành chính (Không bị ghi đè!)" />
+        </div>
+      </div>
+    </section>
+
+    <!-- KHỐI 2 -->
+    <section id="boxKhamBenh" class="card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">2. Sinh hiệu &amp; Khám bệnh — 100% Tạo bằng JS <code>createElement</code></div>
+          <div class="card-sub">
+            Các ô dưới đây <b>không có ID, không có Name, trùng sạch Class</b>, kèm cặp 2 ô đôi <b>Huyết áp</b>!
+          </div>
+        </div>
+        <button type="button" id="btnMutateDom" class="btn btn-outline" style="padding:4px 8px; font-size:11.5px;">
+          🔀 Chèn dòng JS &amp; Render lại DOM
+        </button>
+      </div>
+
+      <div id="dynamicAlertsZone"></div>
+      <div id="jsGeneratedVitalsContainer"></div>
+
+      <hr style="border:none; border-top:1px dashed #e2e8f0; margin: 12px 0;" />
+
+      <div class="form-grid">
+        <div class="field col-span-2">
+          <label>
+            <span>Ghi chú Khám bệnh (Trùng <code>name="GhiChu"</code> với Khối 1!)</span>
+            <span class="hint-chip">#boxKhamBenh + name="GhiChu"</span>
+          </label>
+          <input type="text" class="form-control" name="GhiChu" placeholder="Nhập Nhiệt độ (VD: 39) ở trên -> chỉ điền vào ô này!" />
+        </div>
+
+        <div class="field col-span-2">
+          <label style="justify-content:flex-start; gap:8px; cursor:pointer;">
+            <input type="checkbox" formcontrolname="canTheoDoiSot" style="width:16px; height:16px;" />
+            <span>☑️ Cảnh báo: Cần theo dõi sốt cao (Tự động tick bằng Script khi Nhiệt độ &ge; 38.5°C)</span>
+          </label>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="grid-2">
+    <!-- KHỐI 3 -->
+    <section id="boxDonThuoc" class="card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">3. Bảng Kê đơn thuốc động (Các dòng sinh bằng JS giống hệt nhau 100%)</div>
+          <div class="card-sub">
+            Đổi <b>Đường dùng</b> ở dòng nào ➔ chỉ tự điền <b>Cách dùng</b> &amp; tính <b>Tổng SL</b> ở đúng dòng đó nhờ tiền tố <code>row:</code>
+          </div>
+        </div>
+        <button type="button" id="btnAddRxRow" class="btn btn-sky" style="padding:5px 10px; font-size:12px;">
+          ＋ Thêm dòng thuốc (JS)
+        </button>
+      </div>
+
+      <table id="tblDonThuoc" class="rx-table">
+        <thead>
+          <tr>
+            <th>Tên thuốc</th>
+            <th style="width:118px;">Đường dùng (Trigger)</th>
+            <th style="width:58px;">Sáng</th>
+            <th style="width:58px;">Tối</th>
+            <th style="width:62px;">Số ngày</th>
+            <th style="width:72px;">Tổng SL</th>
+            <th>Cách dùng (Tự điền theo dòng)</th>
+          </tr>
+        </thead>
+        <tbody id="rxTbody"></tbody>
+      </table>
+    </section>
+
+    <!-- KHỐI 4 -->
+    <section id="boxChuanDoan" class="card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">4. Chẩn đoán ICD-10 — Test riêng Select2 AJAX (Plugin JS)</div>
+          <div class="card-sub">
+            Chọn gợi ý lâm sàng ➔ Plugin <code>select2_auto_select</code> tự mở Select2 ICD, gõ chữ chờ AJAX <code>300ms</code> và click chọn!
+          </div>
+        </div>
+        <span class="tag-case purple">Plugin Select2 AJAX</span>
+      </div>
+
+      <div class="form-grid">
+        <div class="field col-span-2">
+          <label for="cboGoiYLamSang">
+            <span>Gợi ý hội chứng lâm sàng (Trigger)</span>
+            <span class="hint-chip">#cboGoiYLamSang</span>
+          </label>
+          <select id="cboGoiYLamSang">
+            <option value="">-- Chọn hội chứng để tự tìm mã ICD-10 --</option>
+            <option value="SXH">Sốt xuất huyết Dengue</option>
+            <option value="THA">Tăng huyết áp vô căn</option>
+            <option value="VIEM_HONG">Viêm họng cấp</option>
+          </select>
+        </div>
+
+        <div class="field col-span-2">
+          <label for="cboIcdAjax">
+            <span>Mã bệnh chính ICD-10 (Select2 AJAX — Ban đầu chưa có thẻ &lt;option&gt; nào!)</span>
+            <span class="hint-chip">#cboIcdAjax</span>
+          </label>
+          <select id="cboIcdAjax"></select>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- BẢNG ĐỐI CHIẾU NHANH 7 CASE CHỌN ELEMENT -->
+  <section class="card">
+    <div class="card-head" style="margin-bottom: 8px;">
+      <div>
+        <div class="card-title">📋 Bảng đối chiếu kiểm thử nhanh: 7 Trường hợp Chọn Element đảm bảo đúng &amp; duy nhất (🎯 / 🔍)</div>
+        <div class="card-sub">Mở một Kịch bản ở bên phải, dùng nút <b>🎯 Chọn</b> click vào từng ô bên trên rồi bấm <b>🔍</b> để kiểm chứng</div>
+      </div>
+    </div>
+    <table class="rx-table" style="margin-top: 4px;">
+      <thead>
+        <tr>
+          <th style="width: 195px;">Trường hợp kiểm thử</th>
+          <th style="width: 225px;">Ô thử nghiệm trên trang này</th>
+          <th>Selector kỳ vọng sinh ra (Đảm bảo đúng &amp; duy nhất 1/1)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b>Case E1</b> — Có ID tĩnh chuẩn</td>
+          <td>Khối 1: <b>Năm sinh</b> / <b>Đối tượng</b></td>
+          <td><code>#txtNamSinh</code>, <code>#cboDoiTuong</code> ➔ Bấm 🔍 hiện <b>✅ Khớp duy nhất (1/1)</b></td>
+        </tr>
+        <tr>
+          <td><b>Case E2</b> — ID ảo nhảy số khi F5</td>
+          <td>Khối 1: <b>SĐT</b> (<code>mat-input-xxxxx</code>)</td>
+          <td>Tự bỏ qua ID rác <code>mat-input-...</code>, bắt <code>input[formcontrolname="soDienThoai"]</code></td>
+        </tr>
+        <tr>
+          <td><b>Case E3</b> — Bọc UI ảo Select2</td>
+          <td>Khối 1: <b>Nghề nghiệp</b> (không ID)</td>
+          <td>Click vào hộp Select2 ➔ Tự tìm về thẻ <code>&lt;select&gt;</code> gốc: <code>select[name="MaNgheNghiep"]</code></td>
+        </tr>
+        <tr>
+          <td><b>Case E4</b> — Trùng thuộc tính ở 2 vùng</td>
+          <td>Khối 1 &amp; 2: 2 ô <b>Ghi chú</b> cùng <code>name="GhiChu"</code></td>
+          <td>Tự khoanh vùng cha gần nhất: <code>#boxHanhChinh input.form-control[name="GhiChu"]</code> vs <code>#boxKhamBenh ...</code></td>
+        </tr>
+        <tr>
+          <td><b>Case E5</b> — Sinh bằng JS, 0 ID, 0 Name</td>
+          <td>Khối 2: <b>Nhiệt độ</b> / <b>Mạch</b> (bấm thử nút 🔀 Chèn dòng JS)</td>
+          <td>XPath neo chữ: <code>(//label[normalize-space(.)="Nhiệt độ (°C)"]/following::input)[1]</code> (Chèn thêm DOM phía trên vẫn không lệch!)</td>
+        </tr>
+        <tr>
+          <td><b>Case E6</b> — Cặp 2 ô đôi giống hệt nhau</td>
+          <td>Khối 2: 2 ô <b>Huyết áp</b> (Tâm thu / Tâm trương)</td>
+          <td>Tự phân tách chỉ số cục bộ sau nhãn: <code>(...="Huyết áp (mmHg)"]/following::input)[1]</code> và <code>[2]</code></td>
+        </tr>
+        <tr>
+          <td><b>Case E7</b> — Bảng động nhiều dòng giống hệt</td>
+          <td>Khối 3: Bảng <b>Đơn thuốc</b> (bấm ＋ Thêm dòng)</td>
+          <td>Dùng tiền tố <code>row:</code> (VD: <code>row: input.inp-cach-dung</code>, <code>row: input.inp-so-luong</code>) ➔ Dòng nào tính riêng đúng dòng đó!</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Thứ tự nạp chuẩn: Mock API -> jQuery/Select2 -> Network Monitor -> Plugins -> Content Engine -> Demo Page Logic -->
+  <script src="mock-his-server.js"></script>
+  <script src="vendor/jquery.min.js"></script>
+  <script src="vendor/select2.min.js"></script>
+  <script src="../content/page-network-monitor.js"></script>
+  <script src="../plugins/custom-plugins.js"></script>
+  <script src="../content/content.js"></script>
+  <script src="demo.js"></script>
+</body>
+</html>
