@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BATO_UTILITIES — Bộ Tiện Ích Tổng Hợp</title>
+  <link rel="icon" href="../icons/icon48.png" />
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body data-view="popup">
+  <div class="app-shell">
+    <!-- THANH TIÊU ĐỀ & CHUYỂN ĐỔI ĐA CHẾ ĐỘ (POPUP / SIDE PANEL / TAB) -->
+    <header class="topbar">
+      <div class="brand">
+        <img src="../icons/icon128.png" alt="VP" class="brand-logo" />
+        <div class="brand-text">
+          <div class="brand-title-row">
+            <h1>BATO_UTILITIES</h1>
+            <span id="currentViewBadge" class="view-badge">Popup</span>
+          </div>
+          <p class="brand-sub">Bộ tiện ích tổng hợp • Vien Pham</p>
+        </div>
+      </div>
+
+      <div class="topbar-controls">
+        <div class="mode-switch-group" title="Chuyển nhanh chế độ hiển thị hiện tại (dữ liệu đang nhập được giữ nguyên)">
+          <button type="button" id="btnSwitchPanel" class="mode-btn" title="Mở sang thanh Side Panel dọc bên phải màn hình">
+            📌 Side Panel
+          </button>
+          <button type="button" id="btnSwitchTab" class="mode-btn" title="Mở rộng ra Tab lớn toàn màn hình">
+            🖥️ Mở Tab
+          </button>
+        </div>
+
+        <label class="default-mode-wrap" title="Chọn chế độ mặc định mỗi khi bấm vào biểu tượng BATO_UTILITIES trên trình duyệt">
+          <span class="default-mode-lbl">Mặc định:</span>
+          <select id="selDefaultLaunchMode" class="default-mode-select">
+            <option value="popup">🪟 Popup</option>
+            <option value="panel">📌 Side Panel</option>
+            <option value="tab">🖥️ Tab mới</option>
+          </select>
+        </label>
+      </div>
+    </header>
+
+    <!-- THANH CHỌN CÔNG CỤ NGANG (HIỂN THỊ KHI Ở POPUP / SIDE PANEL) -->
+    <nav id="compactToolTabs" class="compact-tool-tabs" aria-label="Danh sách công cụ"></nav>
+
+    <!-- BỐ CỤC CHÍNH (SIDEBAR TRÁI KHI Ở CHẾ ĐỘ TAB LỚN + KHUNG LÀM VIỆC PHẢI) -->
+    <div class="workspace-layout">
+      <aside id="fullTabSidebar" class="tool-sidebar">
+        <div class="sidebar-search-box">
+          <input
+            type="search"
+            id="inpSearchTools"
+            class="inp"
+            placeholder="🔍 Tìm nhanh tiện ích..."
+            autocomplete="off"
+          />
+        </div>
+        <div id="sidebarToolsList" class="sidebar-tools-list"></div>
+        <div class="sidebar-footer-note">
+          <div class="note-title">🧩 Kiến trúc Đa công cụ</div>
+          <p>Dễ dàng cắm thêm tiện ích mới trong thư mục <code>tools/</code> qua <code>registerBatoUtilityTool()</code>.</p>
+        </div>
+      </aside>
+
+      <main id="toolMountContainer" class="tool-main"></main>
+    </div>
+
+    <footer class="app-footer">
+      <span>⚡ <b>BATO_UTILITIES</b> v1.0.0 — Tiện ích tổng hợp đa chế độ</span>
+      <a href="https://www.facebook.com/phamminhvien" target="_blank" rel="noreferrer">Vien Pham (BV ĐKKV Ba Tơ)</a>
+    </footer>
+  </div>
+
+  <!-- TOAST THÔNG BÁO NỘI BỘ -->
+  <div id="appToast" class="app-toast hidden" role="status" aria-live="polite"></div>
+
+  <!-- Nạp Registry -> Danh sách các Tool -> Bộ điều khiển chính -->
+  <script src="../tools/registry.js"></script>
+  <script src="../tools/cccd-qr-generator.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
