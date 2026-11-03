@@ -1,58 +1,93 @@
-# 🛠️ BATO_UTILITIES — Bộ Tiện Ích Tổng Hợp Đa Chế Độ
+# 🛠️ BATO_UTILITIES v2.0.0 — Trung Tâm Tiện Ích Đa Năng Nghiệp Vụ Y Tế & HIS
 
-Tiện ích mở rộng trình duyệt (**Chrome / Microsoft Edge / Cốc Cốc / Brave** — chuẩn **Manifest V3**) được thiết kế theo kiến trúc **Bộ công cụ tổng hợp (Multi-Tool Hub)**, hỗ trợ linh hoạt cả **3 chế độ hiển thị** (`Popup` • `Side Panel` • `Tab toàn màn hình`) trên cùng một giao diện.
+Tiện ích mở rộng trình duyệt (**Chrome / Microsoft Edge / Cốc Cốc / Brave** — chuẩn **Manifest V3**) được thiết kế theo kiến trúc **Bộ công cụ tổng hợp (Multi-Tool Hub)**, hỗ trợ linh hoạt cả **3 chế độ hiển thị** (`Popup` • `Side Panel` • `Tab toàn màn hình`) trên cùng một giao diện mượt mà.
 
 - **Tác giả:** Vien Pham — IT Bệnh viện ĐKKV Ba Tơ ([Facebook](https://www.facebook.com/phamminhvien))
 
 ---
 
-## 🖥️ Đa chế độ hiển thị (Popup ➔ Side Panel ➔ Tab lớn)
-
-1. **`🪟 Chế độ Popup`**: Bấm vào icon tiện ích trên thanh công cụ để mở nhanh hộp thoại nổi, tạo và sao chép dữ liệu tức thì trong vài giây.
-2. **`📌 Chế độ Side Panel`**: Neo cố định dọc bên phải màn hình trình duyệt để vừa nhìn phần mềm nghiệp vụ (HIS, Hành chính công...) ở bên trái vừa thao tác liên tục mà không bị tự đóng.
-3. **`🖥️ Chế độ Tab lớn (New Tab)`**: Giao diện bảng điều khiển 2 cột rộng rãi kèm thanh tìm kiếm danh mục công cụ bên trái và vùng nhập liệu — kết quả song song bên phải.
-- **Chuyển đổi tức thì & Nhớ chế độ mặc định**: Có thể bấm chuyển qua lại giữa `Popup`, `Side Panel`, `Tab` ngay trên thanh tiêu đề mà **không mất dữ liệu đang gõ dở**, đồng thời chọn sẵn **Chế độ mở mặc định** khi click biểu tượng tiện ích.
-
----
-
-## 🧰 Danh sách công cụ hiện có
-
-### 1. 🪪 Tạo chuỗi ký tự QR thẻ CCCD gắn chip (`cccd_qr_generator`)
-Phục vụ trường hợp **bệnh nhân / công dân quên mang thẻ CCCD vật lý** nhưng nhớ số định danh cá nhân và các thông tin cơ bản, giúp cán bộ tiếp đón tạo ra chuỗi ký tự giống hệt kết quả bắn từ súng quét QR chuẩn Bộ Công An (7 trường phân tách bằng dấu `|`):
-
-```text
-Số CCCD (12 số)|Số CMND cũ (9 số)|Họ và tên|Ngày sinh (ddMMyyyy)|Giới tính|Nơi thường trú|Ngày cấp (ddMMyyyy)
-```
-
-**Các tính năng thông minh hỗ trợ thực tế:**
-- **Tự động giải mã & Kiểm tra chéo từ 12 số CCCD**:
-  - Tra cứu tự động **63 mã Tỉnh/Thành phố đăng ký khai sinh (`001` – `096`)** từ 3 chữ số đầu.
-  - Tự động suy luận **Giới tính (`Nam` / `Nữ`)** và **Năm sinh gốc** từ chữ số thứ 4–6; cảnh báo ngay nếu người dân đọc nhầm số CCCD làm lệch năm sinh hoặc giới tính.
-- **Xử lý linh hoạt các thông tin hay quên**:
-  - *CMND 9 số cũ*: Cho phép để trống (tự giữ đúng cặp dấu `||` chuẩn 7 trường).
-  - *Ngày sinh*: Cho phép gõ liền `15081994`, `15/08/1994` hoặc chỉ gõ năm `1994` (tùy chọn tự ghép `0101yyyy`, kèm nút điền nhanh `01/01/YYYY` từ mã số CCCD).
-  - *Ngày cấp thẻ*: Gợi ý 1 chạm đợt cấp thẻ chip (`10/05/2021`), tự tính theo mốc tuổi cấp đổi (`14 / 25 / 40 / 60 tuổi`) hoặc để trống.
-  - *Nơi thường trú*: Tích hợp các **nút bấm ghép nhanh Xã/Huyện/Tỉnh thường gặp** (cho phép tự lưu thêm hoặc xóa mẫu địa danh của đơn vị).
-- **Sao chép nhanh & Kiểm tra ngược**:
-  - Nút **`📋 Sao chép chuỗi QR`** (`Ctrl + Enter`), **`📋 Copy & Nhập mới`** (`Alt + N` làm mới), tùy chọn kèm phím `Enter` cuối chuỗi.
-  - Hỗ trợ **dán chuỗi QR có sẵn để bóc tách ngược lên 7 ô** chỉnh sửa lại và lưu **Lịch sử 15 mục gần nhất**.
+## 🌟 Trải nghiệm Trung Tâm Tiện Ích (Dashboard Hub)
+- **Màn hình Tổng quan**: Hiển thị toàn bộ công cụ dưới dạng lưới Card với icon sinh động, phân loại danh mục, mô tả chi tiết và ô tìm kiếm nhanh.
+- **Ghim Yêu thích (Favorite ⭐)**: Cho phép ghim các công cụ thường dùng lên đầu Dashboard.
+- **Thanh điều hướng linh hoạt**: Nút `🏠 Menu Tiện Ích` trên thanh tiêu đề và thanh cuộn ngang giúp chuyển đổi giữa các tiện ích tức thì mà **không mất dữ liệu đang nhập dở**.
+- **3 chế độ hiển thị**:
+  1. `🪟 Popup`: Mở nhanh hộp thoại nổi khi bấm biểu tượng trên thanh công cụ.
+  2. `📌 Side Panel`: Neo cố định dọc cạnh phải màn hình để vừa nhìn phần mềm HIS vừa thao tác liên tục.
+  3. `🖥️ Tab lớn`: Bảng điều khiển rộng rãi với sidebar cây danh mục và tìm kiếm chuyên sâu.
 
 ---
 
-## 🧩 Hướng dẫn mở rộng thêm Công cụ mới (Plug-and-Play)
+## 🧰 Danh sách 9 Công cụ Tích hợp Sẵn
 
-Kiến trúc của `BATO_UTILITIES` cho phép cắm thêm bất kỳ công cụ mới nào chỉ với **2 bước**:
-1. Tạo file `tools/<ten-cong-cu>.js` và đăng ký qua `window.registerBatoUtilityTool({ id, name, shortName, icon, category, description, mount(container, ctx) { ... } })`.
-2. Khai báo thẻ `<script src="../tools/<ten-cong-cu>.js"></script>` trong [`app/index.html`](./app/index.html) — thanh điều hướng ngang (Popup/Panel) và cây danh mục tìm kiếm (Tab lớn) sẽ tự động nhận diện.
+### 1. 🪪 Tạo chuỗi QR Thẻ CCCD gắn chip (`cccd_qr_generator`)
+- Tạo chuỗi 7 trường chuẩn Bộ Công An khi bệnh nhân quên mang thẻ vật lý:
+  `Số CCCD|Số CMND cũ|Họ và tên|Ngày sinh|Giới tính|Nơi thường trú|Ngày cấp`
+- Tự động tra cứu mã Tỉnh/Thành (`001` - `096`), suy luận Giới tính & Năm sinh gốc từ 12 số định danh.
+- Nút bấm nhanh ghép địa danh Xã/Huyện/Tỉnh, tính hạn cấp đổi thẻ, giải mã ngược từ chuỗi QR có sẵn.
+
+### 2. 🏥 Tạo & Phân tích chuỗi QR Thẻ BHYT (`bhyt_qr_generator`)
+- Tạo chuỗi quét QR chuẩn Bộ Y tế / BHXH Việt Nam:
+  `Mã thẻ (15 số)|Họ tên|Ngày sinh|Giới tính|Địa chỉ|Mã CSKCB BĐ|Từ ngày|Đến ngày|Thời điểm 5 năm`
+- Tự động phân tích 15 ký tự thẻ BHYT:
+  - Mã đối tượng: `GD`, `TE`, `DN`, `HT`, `HN`, `DT`, `QN`, `CA`...
+  - Mức hưởng: `1` (100% không giới hạn), `2` (100%), `3` (95%), `4` (80%), `5` (100% đặc thù).
+  - Tỉnh/TP cấp thẻ (`51`: Quảng Ngãi, `01`: Hà Nội, `79`: TP.HCM...).
+- Nút chọn nhanh mã CSKCB BĐ (`51008` BV Ba Tơ, `51023` TTYT Ba Tơ, `51001` BVĐK Quảng Ngãi...).
+
+### 3. 👶 Thước Tính Tuổi & Phân loại đối tượng (`age_calculator`)
+- Tính chính xác Tuổi năm, Số tháng tuổi (rất quan trọng với trẻ em < 36 tháng, < 72 tháng), Số ngày tuổi (sơ sinh ≤ 28 ngày).
+- Tự động phân loại chính sách:
+  - 🍼 Trẻ sơ sinh (≤ 28 ngày)
+  - 🧒 Trẻ dưới 36 tháng
+  - 🚸 Trẻ em dưới 6 tuổi: Cảnh báo chính xác **Ngày hết hạn thẻ BHYT TE (đủ 72 tháng)**
+  - 🌟 Người cao tuổi từ đủ 80 tuổi (ưu tiên KCB).
+
+### 4. 🩺 Thước Tính Y Khoa Lâm Sàng (`clinical_calculators`)
+- **BMI & Diện tích bề mặt cơ thể (BSA)**:
+  - Tính BMI theo chuẩn Châu Á (WPRO / Bộ Y tế): Gầy, Bình thường, Thừa cân, Béo phì I, II.
+  - Tính diện tích da BSA theo công thức Mosteller và DuBois (dùng tính liều hóa trị/kháng sinh).
+  - Tính Cân nặng lý tưởng (IBW - Devine).
+- **Độ thanh thải Creatinine (CrCl Cockcroft-Gault & KDIGO)**:
+  - Tính CrCl (ml/phút) kèm quy đổi tự động `µmol/L` ⇋ `mg/dL`.
+  - Phân độ suy thận KDIGO (G1 đến G5) và khuyến cáo chỉnh liều kháng sinh của Dược lâm sàng.
+- **Tốc độ truyền dịch (IV Flow Rate)**:
+  - Tính số giọt/phút (gtt/min) và ml/giờ theo dây truyền dịch chuẩn (20 gtt/ml), truyền máu (15 gtt/ml) hoặc dây vi hạt nhi khoa (60 gtt/ml).
+
+### 5. 🧪 Chuyển Đổi Đơn Vị Xét Nghiệm (`unit_converter`)
+- Chuyển đổi 2 chiều đơn vị SI (`mmol/L`, `µmol/L`) sang đơn vị thông dụng (`mg/dL`):
+  - Glucose máu (kèm đánh giá hạ đường huyết, bình thường, tiền ĐTĐ, ĐTĐ).
+  - Creatinine máu.
+  - Bộ mỡ Lipid máu (Cholesterol toàn phần, Triglyceride, HDL, LDL).
+  - Acid Uric máu (Gout).
+  - Bilirubin toàn phần.
+  - Urea máu ⇋ BUN (Blood Urea Nitrogen).
+
+### 6. 💰 Đọc Số Tiền Thành Chữ Viện Phí (`money_to_words`)
+- Phục vụ thu ngân viện phí, kế toán viện, thủ quỹ: Nhập `1.532.000` ➔ `Một triệu năm trăm ba mươi hai nghìn đồng chẵn`.
+- Chuẩn ngữ pháp tiếng Việt tài chính, tùy chọn viết HOA, thêm đuôi "chẵn" hoặc "./.". Hỗ trợ tiền tệ VND, USD, EUR.
+
+### 7. ✍️ Chuẩn Hóa & Xử Lý Văn Bản Y Tế (`text_cleaner`)
+- Sửa lỗi mã font cũ: Chuyển bảng mã **TCVN3 (ABC/.VnTime)** sang **Unicode chuẩn** (rất tiện khi sao chép từ máy cận lâm sàng/xét nghiệm cũ vào HIS).
+- Chuẩn hóa Họ và Tên (xóa khoảng trắng thừa, viết hoa chữ cái đầu).
+- Bỏ dấu tiếng Việt (chuẩn ASCII không dấu cho file XML BHYT theo QĐ 130).
+
+### 8. 📋 Mẫu Mô Tả Khám Bệnh & Cận Lâm Sàng (`quick-templates`)
+- Kho mẫu mô tả bình thường 1 chạm sao chép vào HIS: Khám nội khoa toàn thân, Siêu âm bụng tổng quát, X-quang tim phổi, ECG nhịp xoang, Nội soi TMH, Khám nhi...
+- Hỗ trợ bác sĩ tự tạo, chỉnh sửa và lưu mẫu riêng của khoa phòng mình (lưu trữ cục bộ).
+
+### 9. 🏷️ Tạo Mã Vạch Code 128 & QR Code Chuẩn (`barcode_generator`)
+- Hoạt động 100% offline không cần Internet.
+- Sinh mã vạch Code 128 chuẩn công nghiệp cho: Mã bệnh nhân, Số vào viện, Mã bệnh án, Mã đơn thuốc.
+- Hỗ trợ in trực tiếp nhãn mã vạch hoặc đưa máy quét barcode cầm tay vào màn hình test tín hiệu "Bíp".
 
 ---
 
-## 🚀 Hướng dẫn cài đặt (Load Unpacked)
+## 🚀 Hướng Dẫn Cài Đặt (Load Unpacked)
 
 1. Mở trình duyệt **Chrome** (`chrome://extensions/`) hoặc **Microsoft Edge** (`edge://extensions/`).
-2. Bật **Developer mode** *(Chế độ dành cho nhà phát triển)*.
-3. Nhấn **Load unpacked** *(Tải tiện ích đã giải nén)* và chọn thư mục:
+2. Bật công tắc **Developer mode** *(Chế độ dành cho nhà phát triển)*.
+3. Bấm **Load unpacked** *(Tải tiện ích đã giải nén)* và chọn thư mục:
    ```text
-   .../src/toolkit/extensions/BATO_UTILITIES
+   D:\Development\bato_his\src\toolkit\extensions\BATO_UTILITIES
    ```
-4. Ghim biểu tượng **BATO_UTILITIES** lên thanh công cụ trình duyệt để sử dụng ở bất kỳ chế độ nào (`Popup` / `Side Panel` / `Tab`).
+4. Ghim biểu tượng **BATO_UTILITIES** lên thanh công cụ trình duyệt để sử dụng.

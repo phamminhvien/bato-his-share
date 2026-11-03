@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "BATO_UTILITIES",
-  "version": "1.0.0",
-  "author": "Vien Pham",
-  "description": "Bộ tiện ích tổng hợp đa chế độ (Popup • Side Panel • Tab lớn): Tạo chuỗi ký tự QR thẻ CCCD chuẩn Bộ Công An và các công cụ hỗ trợ nghiệp vụ nhanh.",
+  "version": "2.0.0",
+  "author": "Vien Pham (IT Bệnh viện ĐKKV Ba Tơ)",
+  "description": "Bộ tiện ích tổng hợp đa chế độ (Popup • Side Panel • Tab lớn): Trung tâm công cụ nghiệp vụ Y tế, QR CCCD, QR BHYT, Tính tuổi, Thước tính lâm sàng (BMI, CrCl, Dịch truyền), Đổi đơn vị XN, Đọc tiền thành chữ, Chuẩn hóa văn bản HIS, Mẫu khám bệnh, Barcode 128.",
   "permissions": [
     "storage",
     "sidePanel",

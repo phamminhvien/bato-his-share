@@ -12,17 +12,23 @@
     <!-- THANH TIÊU ĐỀ & CHUYỂN ĐỔI ĐA CHẾ ĐỘ (POPUP / SIDE PANEL / TAB) -->
     <header class="topbar">
       <div class="brand">
-        <img src="../icons/icon128.png" alt="VP" class="brand-logo" />
+        <button type="button" id="btnGoHome" class="brand-home-btn" title="Quay lại Trung tâm Menu tiện ích (Dashboard)">
+          <img src="../icons/icon128.png" alt="VP" class="brand-logo" />
+        </button>
         <div class="brand-text">
           <div class="brand-title-row">
-            <h1>BATO_UTILITIES</h1>
+            <h1 id="topbarAppTitle">BATO_UTILITIES</h1>
             <span id="currentViewBadge" class="view-badge">Popup</span>
           </div>
-          <p class="brand-sub">Bộ tiện ích tổng hợp • Vien Pham</p>
+          <p id="topbarBreadcrumb" class="brand-sub">Trung tâm tiện ích tổng hợp • Vien Pham</p>
         </div>
       </div>
 
       <div class="topbar-controls">
+        <button type="button" id="btnNavHome" class="mode-btn btn-home-pill" title="Trở về Trang chủ Menu tiện ích">
+          🏠 Menu Tiện Ích
+        </button>
+
         <div class="mode-switch-group" title="Chuyển nhanh chế độ hiển thị hiện tại (dữ liệu đang nhập được giữ nguyên)">
           <button type="button" id="btnSwitchPanel" class="mode-btn" title="Mở sang thanh Side Panel dọc bên phải màn hình">
             📌 Side Panel
@@ -43,7 +49,7 @@
       </div>
     </header>
 
-    <!-- THANH CHỌN CÔNG CỤ NGANG (HIỂN THỊ KHI Ở POPUP / SIDE PANEL) -->
+    <!-- THANH CHỌN CÔNG CỤ NGANG (POPUP / SIDE PANEL) -->
     <nav id="compactToolTabs" class="compact-tool-tabs" aria-label="Danh sách công cụ"></nav>
 
     <!-- BỐ CỤC CHÍNH (SIDEBAR TRÁI KHI Ở CHẾ ĐỘ TAB LỚN + KHUNG LÀM VIỆC PHẢI) -->
@@ -61,7 +67,7 @@
         <div id="sidebarToolsList" class="sidebar-tools-list"></div>
         <div class="sidebar-footer-note">
           <div class="note-title">🧩 Kiến trúc Đa công cụ</div>
-          <p>Dễ dàng cắm thêm tiện ích mới trong thư mục <code>tools/</code> qua <code>registerBatoUtilityTool()</code>.</p>
+          <p>Hệ thống hỗ trợ cắm thêm tiện ích mới độc lập qua <code>registerBatoUtilityTool()</code>.</p>
         </div>
       </aside>
 
@@ -69,7 +75,7 @@
     </div>
 
     <footer class="app-footer">
-      <span>⚡ <b>BATO_UTILITIES</b> v1.0.0 — Tiện ích tổng hợp đa chế độ</span>
+      <span>⚡ <b>BATO_UTILITIES</b> — Bộ tiện ích tổng hợp đa chế độ</span>
       <a href="https://www.facebook.com/phamminhvien" target="_blank" rel="noreferrer">Vien Pham (BV ĐKKV Ba Tơ)</a>
     </footer>
   </div>
@@ -77,9 +83,19 @@
   <!-- TOAST THÔNG BÁO NỘI BỘ -->
   <div id="appToast" class="app-toast hidden" role="status" aria-live="polite"></div>
 
-  <!-- Nạp Registry -> Danh sách các Tool -> Bộ điều khiển chính -->
+  <!-- NẠP REGISTRY & CÁC MODULE TIỆN ÍCH CON -->
   <script src="../tools/registry.js"></script>
   <script src="../tools/cccd-qr-generator.js"></script>
+  <script src="../tools/bhyt-qr-generator.js"></script>
+  <script src="../tools/age-calculator.js"></script>
+  <script src="../tools/clinical-calculators.js"></script>
+  <script src="../tools/unit-converter.js"></script>
+  <script src="../tools/money-to-words.js"></script>
+  <script src="../tools/text-cleaner.js"></script>
+  <script src="../tools/quick-templates.js"></script>
+  <script src="../tools/barcode-qr-generator.js"></script>
+
+  <!-- BỘ ĐIỀU KHIỂN CHÍNH -->
   <script src="app.js"></script>
 </body>
 </html>
